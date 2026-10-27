@@ -1,9 +1,9 @@
 """Native build support; optional MSVC PGO never changes default CPU targets."""
 import hashlib
 import importlib.util
-import importlib.metadata
 import json
 import os
+import platform
 from pathlib import Path
 import runpy
 import shutil
@@ -35,31 +35,49 @@ class BuildNative(build_ext):
                 raise OptionError('--pgo-training must contain .htm or .html files')
 
     def run(self):
-        super().run()
         # Ship a private engine so another PDFium wrapper cannot initialize or
         # destroy our engine, or bypass the C library's PDFium mutex.
-        spec = importlib.util.find_spec('pypdfium2_raw')
-        if not spec or not spec.origin:
-            raise SetupError('PDFium is required: install the pypdfium2 build dependency')
-        source = Path(spec.origin).parent
-        binaries = [p for p in source.iterdir() if p.suffix in ('.dll', '.so', '.dylib')]
+        arch=platform.machine().lower()
+        arch={'amd64':'x86_64','aarch64':'arm64'}.get(arch,arch)
+        if sys.platform=='win32':
+            key='win_'+('amd64' if sys.maxsize>2**32 and arch=='x86_64' else 'arm64' if arch=='arm64' else 'x86')
+        else:
+            key=('macos' if sys.platform=='darwin' else 'linux')+'_'+arch
+        override=os.environ.get('DOC2STRUCT_PDFIUM_LIBRARY')
+        source=Path(override).resolve().parent if override else Path(__file__).resolve().parent/'_native_source/c/vendor/pdfium/runtime'/key
+        binaries=[Path(override).resolve()] if override else list(source.glob('doc2struct_pdfium.*'))
+        binaries=[p for p in binaries if p.suffix in ('.dll','.so','.dylib') and p.is_file()]
         if len(binaries) != 1:
-            raise SetupError('Expected one shared PDFium library in pypdfium2_raw')
+            raise SetupError('Custom PDFium runtime is required for '+key+'. Run tools/build_pdfium.py --fetch, or set DOC2STRUCT_PDFIUM_LIBRARY to a bundled custom runtime.')
         binary = binaries[0]
+        metadata=source/'version.json'
+        if not metadata.is_file():
+            raise SetupError('Custom PDFium version.json is missing beside the library')
+        version=json.loads(metadata.read_text())
+        if version.get('bridge_abi')!=1 or version.get('sha256')!=hashlib.sha256(binary.read_bytes()).hexdigest():
+            raise SetupError('Custom PDFium ABI or binary checksum does not match version.json')
+        import ctypes
+        try:
+            engine=ctypes.CDLL(str(binary))
+            if engine.DS_PDF_BridgeVersion()!=1: raise ValueError('unsupported ABI')
+        except (OSError,AttributeError,ValueError) as error:
+            raise SetupError('Cannot load the required doc2struct PDFium bridge: '+str(error)) from error
+        licenses=list((source/'licenses').glob('*'))
+        if not licenses: raise SetupError('Custom PDFium redistribution licenses are missing')
+        super().run()
         destinations = [Path(self.build_lib) / 'doc2struct' / '_pdfium']
         if self.inplace:
             destinations.append(Path(self.get_finalized_command('build_py').get_package_dir('doc2struct')) / '_pdfium')
-        distribution = importlib.metadata.distribution('pypdfium2')
-        licenses = [p for p in distribution.files or () if 'BUILD_LICENSES' in p.parts]
-        if not licenses:
-            raise SetupError('PDFium redistribution licenses were not found')
         for destination in destinations:
             destination.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(binary, destination / ('doc2struct_pdfium' + binary.suffix))
-            shutil.copy2(source / 'version.json', destination / 'version.json')
+            if binary.resolve()!=(destination / ('doc2struct_pdfium' + binary.suffix)).resolve():
+                shutil.copy2(binary, destination / ('doc2struct_pdfium' + binary.suffix))
+            if metadata.resolve()!=(destination/'version.json').resolve():
+                shutil.copy2(metadata, destination / 'version.json')
             (destination / 'licenses').mkdir(exist_ok=True)
             for license in licenses:
-                shutil.copy2(distribution.locate_file(license), destination / 'licenses' / license.name)
+                target=destination/'licenses'/license.name
+                if license.is_file() and license.resolve()!=target.resolve(): shutil.copy2(license,target)
 
     def get_ext_fullpath(self, name):
         if self._pgo_output is not None:

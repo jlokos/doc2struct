@@ -54,7 +54,7 @@ setup(
             'rules', 'parser', 'standardized_text', 'lists', 'flow', 'json', 'tables', 'pdf', 'pdf_layout',
         )] + [str(pcre / ('pcre2_' + name + '.c')) for name in pcre_sources],
         include_dirs=[str(bundled / 'c/include'), str(core), str(pcre), str(bundled / 'c/vendor/pdfium')],
-        depends=[str(p) for p in core.glob('*.h')] + [str(bundled / 'c/include/doc2struct/doc2struct.h')] + [str(p) for p in pcre.glob('*.h')],
+        depends=[str(p) for p in core.glob('*.h')] + [str(bundled / 'c/include/doc2struct/doc2struct.h')] + [str(p) for p in pcre.glob('*.h')] + [str(p) for p in (bundled / 'c/vendor/pdfium').glob('*.h')],
         define_macros=macros,
         extra_compile_args=['/O2', '/utf-8', '/std:c11'] if sys.platform == 'win32' else ['-O3', '-std=c11'],
         libraries=[] if sys.platform == 'win32' else (['m', 'pthread'] if sys.platform == 'darwin' else ['m', 'pthread', 'dl']),

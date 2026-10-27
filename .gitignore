@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.pyd
 *.so
+!c/vendor/pdfium/runtime/**/*.so
 python/_native_source/
 python/src/doc2struct/_pdfium/
 *.egg-info/
@@ -11,6 +12,21 @@ dist/
 .venv/
 venv/
 .pytest_cache/
+
+# local environment
+.env
+.env.*
+!.env.example
+
+# native build outputs
+*.o
+*.obj
+*.a
+*.lib
+*.pdb
+*.ilk
+*.exp
+cmake-build-*/
 
 # run.py output
 testing/

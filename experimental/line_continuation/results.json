@@ -1,0 +1,1101 @@
+{
+  "sample_documents": 23,
+  "sample_formats": {
+    ".htm": 21,
+    ".pdf": 2
+  },
+  "sample_split": {
+    "development": 15,
+    "holdout": 8
+  },
+  "anchor": {
+    "variant": "measured",
+    "checks": {
+      "summary introduction is prose": true,
+      "risk introduction is prose": true,
+      "business fragment absent from headings": true,
+      "MD&A heading complete": true,
+      "related person heading complete": true,
+      "first bullet complete": true,
+      "address and phone not table footnotes": true,
+      "capitalization table title correct": true,
+      "capitalization note continuation complete": true,
+      "financial page labels not headings": true,
+      "table cell matrices preserved": true
+    },
+    "passed": 11,
+    "total": 11
+  },
+  "anchor_metrics": {
+    "baseline": {
+      "seconds": 0.13385149999521673,
+      "metrics": {
+        "rows": 14588,
+        "title": 1110,
+        "textsmall": 234,
+        "table": 156,
+        "image": 43,
+        "text": 12543,
+        "list": 502,
+        "explicit_sections": 35,
+        "predicted_titles": 1074,
+        "long_predicted_titles": 0,
+        "page_titles": 65,
+        "list_items": 681,
+        "list_followed_by_lowercase": 422,
+        "notes": 90,
+        "note_characters": 18051
+      }
+    },
+    "pages": {
+      "seconds": 0.14971890003653243,
+      "metrics": {
+        "rows": 14539,
+        "title": 1045,
+        "textsmall": 234,
+        "table": 156,
+        "image": 43,
+        "text": 12559,
+        "list": 502,
+        "explicit_sections": 35,
+        "predicted_titles": 1009,
+        "long_predicted_titles": 0,
+        "page_titles": 0,
+        "list_items": 681,
+        "list_followed_by_lowercase": 421,
+        "notes": 90,
+        "note_characters": 18051
+      },
+      "removed_title_count": 65,
+      "added_title_count": 0,
+      "output_equal": false,
+      "table_matrices_equal": true
+    },
+    "guarded_notes": {
+      "seconds": 0.18050010001752526,
+      "metrics": {
+        "rows": 14592,
+        "title": 1110,
+        "textsmall": 238,
+        "table": 156,
+        "image": 43,
+        "text": 12543,
+        "list": 502,
+        "explicit_sections": 35,
+        "predicted_titles": 1074,
+        "long_predicted_titles": 0,
+        "page_titles": 65,
+        "list_items": 681,
+        "list_followed_by_lowercase": 422,
+        "notes": 88,
+        "note_characters": 17964
+      },
+      "removed_title_count": 0,
+      "added_title_count": 0,
+      "output_equal": false,
+      "table_matrices_equal": true
+    },
+    "prediction_v2": {
+      "seconds": 0.16158119996543974,
+      "metrics": {
+        "rows": 14588,
+        "title": 1110,
+        "textsmall": 234,
+        "table": 156,
+        "image": 43,
+        "text": 12543,
+        "list": 502,
+        "explicit_sections": 35,
+        "predicted_titles": 1074,
+        "long_predicted_titles": 0,
+        "page_titles": 65,
+        "list_items": 681,
+        "list_followed_by_lowercase": 422,
+        "notes": 90,
+        "note_characters": 18051
+      },
+      "removed_title_count": 0,
+      "added_title_count": 0,
+      "output_equal": true,
+      "table_matrices_equal": true
+    },
+    "measured": {
+      "joins": 11447,
+      "eligible_blocks": 16135,
+      "alignment_error": null,
+      "seconds": 1.8947131999884732,
+      "metrics": {
+        "rows": 3121,
+        "title": 810,
+        "textsmall": 76,
+        "table": 156,
+        "image": 43,
+        "text": 1862,
+        "list": 174,
+        "explicit_sections": 23,
+        "predicted_titles": 786,
+        "long_predicted_titles": 68,
+        "page_titles": 0,
+        "list_items": 681,
+        "list_followed_by_lowercase": 18,
+        "notes": 103,
+        "note_characters": 28907
+      },
+      "removed_title_count": 404,
+      "added_title_count": 104,
+      "output_equal": false,
+      "table_matrices_equal": true
+    }
+  },
+  "native_parity": {
+    "variant": "prediction_v2",
+    "passed": 23,
+    "total": 23,
+    "documents": [
+      {
+        "document": "anthropic_s1/2026-10-26/000162828026067168/anthropicpbc-sx1.htm",
+        "passed": true
+      },
+      {
+        "document": "many_10k/2017-11-03/000032019317000070/a10-k20179302017.htm",
+        "passed": true
+      },
+      {
+        "document": "many_10k/2006-02-28/000110465906012747/a06-1949_110k.htm",
+        "passed": true
+      },
+      {
+        "document": "msft_10k/2007-08-03/000119312507170817/d10k.htm",
+        "passed": true
+      },
+      {
+        "document": "msft_10k/2006-08-25/000119312506180008/d10k.htm",
+        "passed": true
+      },
+      {
+        "document": "msft_8k/2013-09-20/000119312513372141/d600819d8k.htm",
+        "passed": true
+      },
+      {
+        "document": "msft_8k/2004-07-22/000119312504122829/d8k.htm",
+        "passed": true
+      },
+      {
+        "document": "10k_2025/batch_000009.tar::2025-03-31/000095017025047906/shco-20241229.htm",
+        "passed": true
+      },
+      {
+        "document": "10k_2025/batch_000015.tar::2025-03-13/000188852425004454/dma20b22_10k-2024.htm",
+        "passed": true
+      },
+      {
+        "document": "8k_2020/batch_000002.tar::2020-10-08/000119312520266399/d49783d8k.htm",
+        "passed": true
+      },
+      {
+        "document": "8k_2020/batch_000003.tar::2020-08-03/000110465920089319/tm2026258-1_8k.htm",
+        "passed": true
+      },
+      {
+        "document": "sec_html_rules/S-1_6636c92b/000100472413000055/2013-12-31/000100472413000055/forms-1123113.htm",
+        "passed": true
+      },
+      {
+        "document": "sec_html_rules/424B4_75d727af/000162828026067048/2026-10-23/000162828026067048/lyciatherapeutics-424b4.htm",
+        "passed": true
+      },
+      {
+        "document": "sec_html_rules/20-F_de308bee/000106299313006503/2013-12-31/000106299313006503/form20f.htm",
+        "passed": true
+      },
+      {
+        "document": "sec_html_rules/N-CSR_3fedd1fa/000005193123001401/2023-12-29/000005193123001401/afctd_ncsr.htm",
+        "passed": true
+      },
+      {
+        "document": "sec_html_rules/S-3_23fab29e/000095010323018123/2023-12-29/000095010323018123/dp204374_s3.htm",
+        "passed": true
+      },
+      {
+        "document": "sec_html_rules/S-3_23fab29e/000110465926118800/2026-10-26/000110465926118800/tm2628230d1_s3.htm",
+        "passed": true
+      },
+      {
+        "document": "sec_html_rules/10-Q_3ae38e4f/000109690623002468/2023-12-29/000109690623002468/nahd-20230930.htm",
+        "passed": true
+      },
+      {
+        "document": "sec_html_rules/10-Q_3ae38e4f/000002321713000008/2013-12-31/000002321713000008/cag10q2fy14.htm",
+        "passed": true
+      },
+      {
+        "document": "structural_review/amzn-20241231.htm",
+        "passed": true
+      },
+      {
+        "document": "10k_pdf_sample/batch_000001.tar::2004-06-14/000089016304000290/s11-4473_10k.pdf",
+        "passed": true
+      },
+      {
+        "document": "10k_pdf_sample/batch_000001.tar::2012-03-19/000091431712000349/form10k-121612_sal.pdf",
+        "passed": true
+      },
+      {
+        "document": "sec_html_rules/S-1_6636c92b/000119312523305583/2023-12-29/000119312523305583/d567008ds1.htm",
+        "passed": true
+      }
+    ]
+  },
+  "boundary_scenarios": [
+    {
+      "case": "wrapped body",
+      "mode": "geometry",
+      "expected": 1,
+      "joins": 1,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "wrapped body",
+      "mode": "conservative",
+      "expected": 1,
+      "joins": 1,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "wrapped body",
+      "mode": "measured",
+      "expected": 1,
+      "joins": 1,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "paragraph gap",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "paragraph gap",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "paragraph gap",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "independent headings",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 1,
+      "pass_": false,
+      "alignment_error": null
+    },
+    {
+      "case": "independent headings",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "independent headings",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "new bullet",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "new bullet",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "new bullet",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "hanging bullet",
+      "mode": "geometry",
+      "expected": 1,
+      "joins": 1,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "hanging bullet",
+      "mode": "conservative",
+      "expected": 1,
+      "joins": 1,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "hanging bullet",
+      "mode": "measured",
+      "expected": 1,
+      "joins": 1,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "roman item",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "roman item",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "roman item",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "different column",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "different column",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "different column",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "different font",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "different font",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "different font",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "page break",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "page break",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "page break",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "table boundary",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "table boundary",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "table boundary",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "separator",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "separator",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "separator",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "explicit paragraphs",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "explicit paragraphs",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "explicit paragraphs",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "large multiline heading",
+      "mode": "geometry",
+      "expected": 1,
+      "joins": 1,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "large multiline heading",
+      "mode": "conservative",
+      "expected": 1,
+      "joins": 0,
+      "pass_": false,
+      "alignment_error": null
+    },
+    {
+      "case": "large multiline heading",
+      "mode": "measured",
+      "expected": 1,
+      "joins": 1,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "ambiguous adjacent large headings",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 1,
+      "pass_": false,
+      "alignment_error": null
+    },
+    {
+      "case": "ambiguous adjacent large headings",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "ambiguous adjacent large headings",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 1,
+      "pass_": false,
+      "alignment_error": null
+    },
+    {
+      "case": "ordinary HTML paragraphs",
+      "mode": "geometry",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "ordinary HTML paragraphs",
+      "mode": "conservative",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    },
+    {
+      "case": "ordinary HTML paragraphs",
+      "mode": "measured",
+      "expected": 0,
+      "joins": 0,
+      "pass_": true,
+      "alignment_error": null
+    }
+  ],
+  "runs": {
+    "development_final": {
+      "summary": {
+        "baseline": {
+          "documents": 15,
+          "totals": {
+            "rows": 26940,
+            "title": 4869,
+            "textsmall": 622,
+            "table": 991,
+            "image": 99,
+            "text": 19566,
+            "list": 793,
+            "explicit_sections": 348,
+            "predicted_titles": 4506,
+            "long_predicted_titles": 207,
+            "page_titles": 220,
+            "list_items": 1829,
+            "list_followed_by_lowercase": 432,
+            "notes": 414,
+            "note_characters": 95007
+          },
+          "paired_baseline": {
+            "rows": 26940,
+            "title": 4869,
+            "textsmall": 622,
+            "table": 991,
+            "image": 99,
+            "text": 19566,
+            "list": 793,
+            "explicit_sections": 348,
+            "predicted_titles": 4506,
+            "long_predicted_titles": 207,
+            "page_titles": 220,
+            "list_items": 1829,
+            "list_followed_by_lowercase": 432,
+            "notes": 414,
+            "note_characters": 95007
+          },
+          "joins": 0,
+          "matrices_changed": 0,
+          "removed_titles": 0,
+          "added_titles": 0
+        },
+        "guarded_notes": {
+          "documents": 15,
+          "totals": {
+            "rows": 26952,
+            "title": 4869,
+            "textsmall": 632,
+            "table": 991,
+            "image": 99,
+            "text": 19568,
+            "list": 793,
+            "explicit_sections": 348,
+            "predicted_titles": 4506,
+            "long_predicted_titles": 207,
+            "page_titles": 220,
+            "list_items": 1829,
+            "list_followed_by_lowercase": 432,
+            "notes": 407,
+            "note_characters": 94704
+          },
+          "paired_baseline": {
+            "rows": 26940,
+            "title": 4869,
+            "textsmall": 622,
+            "table": 991,
+            "image": 99,
+            "text": 19566,
+            "list": 793,
+            "explicit_sections": 348,
+            "predicted_titles": 4506,
+            "long_predicted_titles": 207,
+            "page_titles": 220,
+            "list_items": 1829,
+            "list_followed_by_lowercase": 432,
+            "notes": 414,
+            "note_characters": 95007
+          },
+          "joins": 0,
+          "matrices_changed": 0,
+          "removed_titles": 0,
+          "added_titles": 0
+        },
+        "measured": {
+          "documents": 14,
+          "totals": {
+            "rows": 12631,
+            "title": 4065,
+            "textsmall": 326,
+            "table": 910,
+            "image": 99,
+            "text": 6779,
+            "list": 452,
+            "explicit_sections": 315,
+            "predicted_titles": 3736,
+            "long_predicted_titles": 254,
+            "page_titles": 0,
+            "list_items": 1814,
+            "list_followed_by_lowercase": 22,
+            "notes": 421,
+            "note_characters": 105609
+          },
+          "paired_baseline": {
+            "rows": 24267,
+            "title": 4504,
+            "textsmall": 506,
+            "table": 910,
+            "image": 99,
+            "text": 17468,
+            "list": 780,
+            "explicit_sections": 327,
+            "predicted_titles": 4163,
+            "long_predicted_titles": 202,
+            "page_titles": 188,
+            "list_items": 1814,
+            "list_followed_by_lowercase": 426,
+            "notes": 413,
+            "note_characters": 94969
+          },
+          "joins": 11447,
+          "matrices_changed": 0,
+          "removed_titles": 543,
+          "added_titles": 104
+        },
+        "pages": {
+          "documents": 15,
+          "totals": {
+            "rows": 26691,
+            "title": 4649,
+            "textsmall": 595,
+            "table": 991,
+            "image": 99,
+            "text": 19564,
+            "list": 793,
+            "explicit_sections": 348,
+            "predicted_titles": 4286,
+            "long_predicted_titles": 207,
+            "page_titles": 0,
+            "list_items": 1829,
+            "list_followed_by_lowercase": 431,
+            "notes": 414,
+            "note_characters": 95007
+          },
+          "paired_baseline": {
+            "rows": 26940,
+            "title": 4869,
+            "textsmall": 622,
+            "table": 991,
+            "image": 99,
+            "text": 19566,
+            "list": 793,
+            "explicit_sections": 348,
+            "predicted_titles": 4506,
+            "long_predicted_titles": 207,
+            "page_titles": 220,
+            "list_items": 1829,
+            "list_followed_by_lowercase": 432,
+            "notes": 414,
+            "note_characters": 95007
+          },
+          "joins": 0,
+          "matrices_changed": 0,
+          "removed_titles": 220,
+          "added_titles": 0
+        },
+        "prediction_v2": {
+          "documents": 15,
+          "totals": {
+            "rows": 26939,
+            "title": 4853,
+            "textsmall": 622,
+            "table": 991,
+            "image": 99,
+            "text": 19581,
+            "list": 793,
+            "explicit_sections": 348,
+            "predicted_titles": 4490,
+            "long_predicted_titles": 191,
+            "page_titles": 220,
+            "list_items": 1829,
+            "list_followed_by_lowercase": 432,
+            "notes": 414,
+            "note_characters": 95007
+          },
+          "paired_baseline": {
+            "rows": 26940,
+            "title": 4869,
+            "textsmall": 622,
+            "table": 991,
+            "image": 99,
+            "text": 19566,
+            "list": 793,
+            "explicit_sections": 348,
+            "predicted_titles": 4506,
+            "long_predicted_titles": 207,
+            "page_titles": 220,
+            "list_items": 1829,
+            "list_followed_by_lowercase": 432,
+            "notes": 414,
+            "note_characters": 95007
+          },
+          "joins": 0,
+          "matrices_changed": 0,
+          "removed_titles": 16,
+          "added_titles": 0
+        }
+      },
+      "metadata": {
+        "python": "3.14.5 (tags/v3.14.5:5607950, May 10 2026, 10:43:50) [MSC v.1944 64 bit (AMD64)]",
+        "platform": "Windows-11-10.0.26300-SP0",
+        "variants": [
+          "baseline",
+          "pages",
+          "guarded_notes",
+          "prediction_v2",
+          "measured"
+        ],
+        "sample_sha256": "415cea3b7598cdb07c23da15c8fa14ae3f2e19a1cdbef92b5008ac5f44f5a4f6",
+        "scripts": {
+          "corpus.py": "95815d9099c32d565c3e769e70fd5fee3ffc41581eace4d1863cabf2a686fbc7",
+          "lab.py": "52b5b5f9ebda66934ee5b8906e3428c887f8d6d6346d00322fd9c8f2c60f74ac",
+          "native.py": "dfbc24446538ca1eb331886a316b3788ab99ee55b13b14e3ab3eea5160413d51",
+          "reflow.py": "a494529db47f2f994de82c9d21fba37f4e46134df9af8289d91093527f25481d",
+          "review.py": "a4eb71e656a76202615de6b0cc4061a4706813f527ca9abd26aeaf784730734c",
+          "summarize.py": "dcfd08512317ca15bba106145eb6dd633feeeb91727423f2337b2fd32939a69e",
+          "variants.py": "7bed61a78aa43154552bb1e6463e3cddc47138e421107fc36956b048653facf8"
+        },
+        "binaries": {
+          "baseline": "c0d907eee1323a12e0428a1b3127b99a9effda7bf6b60ac89bb5be2b108cb529",
+          "prediction": "90e36d5921a4c90df77eef207ce75c246206494ea7cb8f6e08be34fe44623d6a",
+          "prediction_v2": "7c17b28f18fdbc7f8b994aa545f3fc09815519a5fa1e63063dee89306d52dc10"
+        },
+        "timings": "Single pass, includes Python prototype and output construction; excludes corpus I/O and rule compilation. Not a native performance benchmark.",
+        "limitations": "Diagnostic counts are not accuracy. HTML-only reconstruction requires a known page and absolute div positions. PDF variants do not reconstruct paragraphs."
+      }
+    },
+    "holdout_final": {
+      "summary": {
+        "baseline": {
+          "documents": 8,
+          "totals": {
+            "rows": 5221,
+            "title": 1246,
+            "image": 1,
+            "table": 425,
+            "text": 3320,
+            "list": 209,
+            "explicit_sections": 187,
+            "predicted_titles": 1051,
+            "long_predicted_titles": 12,
+            "page_titles": 0,
+            "list_items": 375,
+            "list_followed_by_lowercase": 87,
+            "notes": 55,
+            "note_characters": 12670,
+            "textsmall": 20
+          },
+          "paired_baseline": {
+            "rows": 5221,
+            "title": 1246,
+            "image": 1,
+            "table": 425,
+            "text": 3320,
+            "list": 209,
+            "explicit_sections": 187,
+            "predicted_titles": 1051,
+            "long_predicted_titles": 12,
+            "page_titles": 0,
+            "list_items": 375,
+            "list_followed_by_lowercase": 87,
+            "notes": 55,
+            "note_characters": 12670,
+            "textsmall": 20
+          },
+          "joins": 0,
+          "matrices_changed": 0,
+          "removed_titles": 0,
+          "added_titles": 0
+        },
+        "guarded_notes": {
+          "documents": 8,
+          "totals": {
+            "rows": 5221,
+            "title": 1246,
+            "image": 1,
+            "table": 425,
+            "text": 3320,
+            "list": 209,
+            "explicit_sections": 187,
+            "predicted_titles": 1051,
+            "long_predicted_titles": 12,
+            "page_titles": 0,
+            "list_items": 375,
+            "list_followed_by_lowercase": 87,
+            "notes": 54,
+            "note_characters": 12649,
+            "textsmall": 20
+          },
+          "paired_baseline": {
+            "rows": 5221,
+            "title": 1246,
+            "image": 1,
+            "table": 425,
+            "text": 3320,
+            "list": 209,
+            "explicit_sections": 187,
+            "predicted_titles": 1051,
+            "long_predicted_titles": 12,
+            "page_titles": 0,
+            "list_items": 375,
+            "list_followed_by_lowercase": 87,
+            "notes": 55,
+            "note_characters": 12670,
+            "textsmall": 20
+          },
+          "joins": 0,
+          "matrices_changed": 0,
+          "removed_titles": 0,
+          "added_titles": 0
+        },
+        "measured": {
+          "documents": 7,
+          "totals": {
+            "rows": 2104,
+            "title": 725,
+            "image": 1,
+            "table": 209,
+            "text": 1082,
+            "list": 76,
+            "explicit_sections": 156,
+            "predicted_titles": 562,
+            "long_predicted_titles": 9,
+            "page_titles": 0,
+            "list_items": 209,
+            "list_followed_by_lowercase": 4,
+            "notes": 50,
+            "note_characters": 12191,
+            "textsmall": 11
+          },
+          "paired_baseline": {
+            "rows": 2104,
+            "title": 727,
+            "image": 1,
+            "table": 209,
+            "text": 1080,
+            "list": 76,
+            "explicit_sections": 156,
+            "predicted_titles": 564,
+            "long_predicted_titles": 11,
+            "page_titles": 0,
+            "list_items": 209,
+            "list_followed_by_lowercase": 4,
+            "notes": 51,
+            "note_characters": 12212,
+            "textsmall": 11
+          },
+          "joins": 0,
+          "matrices_changed": 0,
+          "removed_titles": 2,
+          "added_titles": 0
+        },
+        "pages": {
+          "documents": 8,
+          "totals": {
+            "rows": 5221,
+            "title": 1246,
+            "image": 1,
+            "table": 425,
+            "text": 3320,
+            "list": 209,
+            "explicit_sections": 187,
+            "predicted_titles": 1051,
+            "long_predicted_titles": 12,
+            "page_titles": 0,
+            "list_items": 375,
+            "list_followed_by_lowercase": 87,
+            "notes": 55,
+            "note_characters": 12670,
+            "textsmall": 20
+          },
+          "paired_baseline": {
+            "rows": 5221,
+            "title": 1246,
+            "image": 1,
+            "table": 425,
+            "text": 3320,
+            "list": 209,
+            "explicit_sections": 187,
+            "predicted_titles": 1051,
+            "long_predicted_titles": 12,
+            "page_titles": 0,
+            "list_items": 375,
+            "list_followed_by_lowercase": 87,
+            "notes": 55,
+            "note_characters": 12670,
+            "textsmall": 20
+          },
+          "joins": 0,
+          "matrices_changed": 0,
+          "removed_titles": 0,
+          "added_titles": 0
+        },
+        "prediction_v2": {
+          "documents": 8,
+          "totals": {
+            "rows": 5221,
+            "title": 1244,
+            "image": 1,
+            "table": 425,
+            "text": 3322,
+            "list": 209,
+            "explicit_sections": 187,
+            "predicted_titles": 1049,
+            "long_predicted_titles": 10,
+            "page_titles": 0,
+            "list_items": 375,
+            "list_followed_by_lowercase": 87,
+            "notes": 55,
+            "note_characters": 12670,
+            "textsmall": 20
+          },
+          "paired_baseline": {
+            "rows": 5221,
+            "title": 1246,
+            "image": 1,
+            "table": 425,
+            "text": 3320,
+            "list": 209,
+            "explicit_sections": 187,
+            "predicted_titles": 1051,
+            "long_predicted_titles": 12,
+            "page_titles": 0,
+            "list_items": 375,
+            "list_followed_by_lowercase": 87,
+            "notes": 55,
+            "note_characters": 12670,
+            "textsmall": 20
+          },
+          "joins": 0,
+          "matrices_changed": 0,
+          "removed_titles": 2,
+          "added_titles": 0
+        }
+      },
+      "metadata": {
+        "python": "3.14.5 (tags/v3.14.5:5607950, May 10 2026, 10:43:50) [MSC v.1944 64 bit (AMD64)]",
+        "platform": "Windows-11-10.0.26300-SP0",
+        "variants": [
+          "baseline",
+          "pages",
+          "guarded_notes",
+          "prediction_v2",
+          "measured"
+        ],
+        "sample_sha256": "415cea3b7598cdb07c23da15c8fa14ae3f2e19a1cdbef92b5008ac5f44f5a4f6",
+        "scripts": {
+          "corpus.py": "95815d9099c32d565c3e769e70fd5fee3ffc41581eace4d1863cabf2a686fbc7",
+          "lab.py": "52b5b5f9ebda66934ee5b8906e3428c887f8d6d6346d00322fd9c8f2c60f74ac",
+          "native.py": "dfbc24446538ca1eb331886a316b3788ab99ee55b13b14e3ab3eea5160413d51",
+          "reflow.py": "a494529db47f2f994de82c9d21fba37f4e46134df9af8289d91093527f25481d",
+          "review.py": "a4eb71e656a76202615de6b0cc4061a4706813f527ca9abd26aeaf784730734c",
+          "summarize.py": "dcfd08512317ca15bba106145eb6dd633feeeb91727423f2337b2fd32939a69e",
+          "variants.py": "7bed61a78aa43154552bb1e6463e3cddc47138e421107fc36956b048653facf8"
+        },
+        "binaries": {
+          "baseline": "c0d907eee1323a12e0428a1b3127b99a9effda7bf6b60ac89bb5be2b108cb529",
+          "prediction": "90e36d5921a4c90df77eef207ce75c246206494ea7cb8f6e08be34fe44623d6a",
+          "prediction_v2": "7c17b28f18fdbc7f8b994aa545f3fc09815519a5fa1e63063dee89306d52dc10"
+        },
+        "timings": "Single pass, includes Python prototype and output construction; excludes corpus I/O and rule compilation. Not a native performance benchmark.",
+        "limitations": "Diagnostic counts are not accuracy. HTML-only reconstruction requires a known page and absolute div positions. PDF variants do not reconstruct paragraphs."
+      }
+    }
+  },
+  "reviewed_change_counts": {
+    "removed false footnote": 8,
+    "prose demotion": 18
+  },
+  "limitations": [
+    "Only the Anthropic document exercised positioned reflow in this real-file sample.",
+    "The measured heading extension fails the ambiguous adjacent large headings scenario.",
+    "HTML geometry sidecar is deliberately limited to absolute divs within known relative page containers.",
+    "Nested transforms, inherited positioning contexts, cross-page continuation and PDF paragraph reconstruction are unsupported.",
+    "Diagnostic counts and targeted anchor checks are not corpus accuracy estimates.",
+    "Python reconstruction includes two normalization passes and is not a production performance implementation.",
+    "Source snapshots and large outputs are ignored artifacts; compact results and the selection manifest are retained."
+  ],
+  "production_files_changed": false
+}

@@ -80,7 +80,7 @@ doc2struct_string doc2struct_defaults_json(void);
  * Free the returned buffer with doc2struct_buffer_free. */
 char *doc2struct_rules_resolve(const char *input, size_t size, int preset,
                              size_t *output_size, doc2struct_error *error);
-/* Append extra headers/columns. Replace remove/tables only when extra differs
+/* Append extra headers/columns. Replace remove/tables/lists when extra differs
  * from defaults. Inputs are JSON objects; output uses buffer_free. */
 char *doc2struct_rules_merge_json(doc2struct_string base, doc2struct_string extra,
                                 size_t *output_size, doc2struct_error *error);
@@ -100,8 +100,8 @@ size_t doc2struct_parser_cached_bytes(const doc2struct_parser *);
 doc2struct_document *doc2struct_parse(doc2struct_parser *, doc2struct_string input,
                                     const doc2struct_rules *, doc2struct_options,
                                     doc2struct_error *error);
-/* Required PDFium runtime. Pass an absolute UTF-8 path to a private copy of the
- * shared library, not a library initialized by another wrapper. Initialization
+/* Required doc2struct PDFium bridge runtime (ABI 1). Pass an absolute UTF-8
+ * path to a private copy, not a library initialized by another wrapper. Initialization
  * is idempotent for that path; the engine lives until process exit. PDFium calls
  * are serialized internally; layout/standardization do not hold its lock. */
 int doc2struct_pdfium_init(const char *library_path, doc2struct_error *error);

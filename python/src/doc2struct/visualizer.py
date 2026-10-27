@@ -28,6 +28,7 @@ td.empty{background:#fafafa}
 .st-title{font-weight:bold;background:#DCEDC8;border-left-color:#7CB342;padding:6px 8px;margin-top:12px}
 .st-text{background:#E8EAF6}
 .st-textsmall{background:#F5F5F5;font-size:12px;color:#555}
+.st-redundant{background:#ECEFF1;font-size:12px;color:#607D8B;border-left-color:#90A4AE}
 .st-list{background:#F3E5F5;border-left-color:#AB47BC;padding:8px}
 .list-meta{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
 .list-meta .tag{color:#7B1FA2}

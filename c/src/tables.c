@@ -382,6 +382,10 @@ static int clean_table(Document *d, const Rules *r, Row *row) {
     return !d->arena.error[0];
 }
 static int text_row(Row *r) { return ds_is(r->type, "text") || ds_is(r->type, "textsmall"); }
+static int annotation_text(Document *d, const Rules *r, Row *row) {
+    return text_row(row) && (!r->annotation_exclude ||
+           !ds_match(d, r->annotation_exclude, ds_strip(row->text, 1), 0));
+}
 static int contains(Str text, const char *part) {
     size_t i, n = strlen(part);
     for (i = 0; i + n <= text.n; i++)
@@ -433,6 +437,13 @@ static int notes_table(Document *d, const Rules *r, Matrix *m, Vec *notes) {
         return 0;
     for (i = 0; i < m->nr; i++) {
         Str marker = ds_strip(m->cells[i * 2], 0);
+        if (r->annotation_exclude) {
+            Str pieces[] = {marker, ds_strip(m->cells[i * 2 + 1], 0)};
+            if (ds_match(d, r->annotation_exclude, ds_join(&d->arena, pieces, 2, ds_str(" ")), 0)) {
+                notes->n = original;
+                return 0;
+            }
+        }
         if (!ds_match(d, r->footnote, marker, 0)) {
             notes->n = original;
             return 0;
@@ -464,10 +475,10 @@ static int absorb(Document *d, const Rules *r) {
             if (!ds_is(rows[i].type, "table"))
                 continue;
             while (start && i - start < (size_t)r->preamble_lines &&
-                   text_row(rows + start - 1))
+                   annotation_text(d, r, rows + start - 1))
                 start--;
             boundary = start;
-            while (boundary && text_row(rows + boundary - 1))
+            while (boundary && annotation_text(d, r, rows + boundary - 1))
                 boundary--;
             if (!boundary || !ds_is(rows[boundary - 1].type, "table"))
                 chosen = start;
@@ -506,7 +517,7 @@ static int absorb(Document *d, const Rules *r) {
                     last = j++;
                     continue;
                 }
-                if (!text_row(x))
+                if (!annotation_text(d, r, x))
                     break;
                 marker = ds_strip(x->text, 0);
                 if (!ds_match(d, r->footnote, marker, 0))
@@ -522,7 +533,7 @@ static int absorb(Document *d, const Rules *r) {
                 x->removed = 1;
                 k = j + 1;
                 while (k < n && r->footnote_lines > 0 && extra < (size_t)r->footnote_lines &&
-                       text_row(rows + k) && !rows[k].removed &&
+                       annotation_text(d, r, rows + k) && !rows[k].removed &&
                        continuation(d, x, rows + k, text) &&
                        !ds_match(d, r->footnote, ds_strip(rows[k].text, 0), 0)) {
                     Str fragments[] = {text, ds_strip(rows[k].text, 0)};
@@ -542,7 +553,7 @@ static int absorb(Document *d, const Rules *r) {
         if (r->postamble_lines > 0) {
             parts = (Vec){0};
             j = last + 1;
-            while (j < n && parts.n < (size_t)r->postamble_lines && text_row(rows + j) &&
+            while (j < n && parts.n < (size_t)r->postamble_lines && annotation_text(d, r, rows + j) &&
                    !rows[j].removed) {
                 if (next_table(rows, n, j)) {
                     row->cleaned |= DS_TABLE_ATTACHMENT;

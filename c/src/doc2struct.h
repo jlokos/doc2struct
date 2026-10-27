@@ -98,10 +98,13 @@ typedef struct doc2struct_rules {
     Column *columns;
     size_t ncolumns;
     long repeat_threshold;
+    Regex *page_label;
     unsigned table_steps;
     int single_row_to_text, title_from_section, unwrap_layout;
     long footnote_lines, preamble_lines, postamble_lines;
     Regex *footnote;
+    Regex *annotation_exclude;
+    long list_gap_rows, list_tail_rows;
     int collect_hrefs;
 } Rules;
 typedef struct doc2struct_item {
@@ -123,6 +126,7 @@ typedef struct {
     Item *table_cells;
     size_t ntable_cells;
     int layout_text;
+    int redundant;
 } Line;
 
 typedef struct ListLines {
@@ -195,6 +199,7 @@ int ds_list_marker(Str, size_t *);
 int ds_list_table(Document *, Line *, Item *, size_t);
 int ds_lists(Document *, Vec *);
 int ds_list_blocks(Document *);
+int ds_list_continuations(Document *, const Rules *);
 int ds_keep_href(Document *, Vec **, Str);
 int ds_append_hrefs(Document *, Vec **, const Vec *);
 int ds_parse(Document *, Str, const Rules *, Options);

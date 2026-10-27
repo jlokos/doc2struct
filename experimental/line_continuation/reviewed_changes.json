@@ -1,0 +1,166 @@
+[
+  {
+    "document": "anthropic_s1/2026-10-26/000162828026067168/anthropicpbc-sx1.htm",
+    "change": "removed false footnote",
+    "marker": "(415)",
+    "text": "326-6303",
+    "review": "Contact/address line; manually inspected."
+  },
+  {
+    "document": "anthropic_s1/2026-10-26/000162828026067168/anthropicpbc-sx1.htm",
+    "change": "removed false footnote",
+    "marker": "548",
+    "text": "Market Street PMB 90375 San Francisco, California 94104",
+    "review": "Contact/address line; manually inspected."
+  },
+  {
+    "document": "many_10k/2017-11-03/000032019317000070/a10-k20179302017.htm",
+    "change": "prose demotion",
+    "text": "This Annual Report on Form 10-K (“Form 10-K”) contains forward-looking statements, within the meaning of the Private Securities Litigation Reform Act of 1995, that involve risks and uncertainties. Many of the forward-looking statements are located in Part II, Item 7 of this Form 10-K under the heading “Management’s Discussion and Analysis of Financial Condition and Results of Operations.” Forward-looking statements provide current expectations of future events based on certain assumptions and include any statement that does not directly relate to any historical or current fact. Forward-looking statements can also be identified by words such as “future,”  “anticipates,”  “believes,”  “estimates,”  “expects,”  “intends,”  “plans,”  “predicts,”  “will,”  “would,”  “could,”  “can,”  “may,” and similar terms. Forward-looking statements are not guarantees of future performance and the Company’s actual results may differ significantly from the results discussed in the forward-looking statements. Factors that might cause such differences include, but are not limited to, those discussed in Part I, Item 1A of this Form 10-K under the heading “Risk Factors,” which are incorporated herein by reference. All information presented herein is based on the Company’s fiscal calendar. Unless otherwise stated, references to particular years, quarters, months or periods refer to the Company’s fiscal years ended in September and the associated quarters, months and periods of those fiscal years. Each of the terms the “Company” and “Apple” as used herein refers collectively to Apple Inc. and its wholly-owned subsidiaries, unless otherwise stated. The Company assumes no obligation to revise or update any forward-looking statements for any reason, except as required by law.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "many_10k/2017-11-03/000032019317000070/a10-k20179302017.htm",
+    "change": "prose demotion",
+    "text": "This section and other parts of this Annual Report on Form 10-K (“Form 10-K”) contain forward-looking statements, within the meaning of the Private Securities Litigation Reform Act of 1995, that involve risks and uncertainties. Forward-looking statements provide current expectations of future events based on certain assumptions and include any statement that does not directly relate to any historical or current fact. Forward-looking statements can also be identified by words such as “future,”  “anticipates,”  “believes,”  “estimates,”  “expects,”  “intends,”  “plans,”  “predicts,”  “will,”  “would,”  “could,”  “can,”  “may,” and similar terms. Forward-looking statements are not guarantees of future performance and the Company’s actual results may differ significantly from the results discussed in the forward-looking statements. Factors that might cause such differences include, but are not limited to, those discussed in Part I, Item 1A of this Form 10-K under the heading “Risk Factors,” which are incorporated herein by reference. The following discussion should be read in conjunction with the consolidated financial statements and notes thereto included in Part II, Item 8 of this Form 10-K. All information presented herein is based on the Company’s fiscal calendar. Unless otherwise stated, references to particular years, quarters, months or periods refer to the Company’s fiscal years ended in September and the associated quarters, months and periods of those fiscal years. Each of the terms the “Company” and “Apple” as used herein refers collectively to Apple Inc. and its wholly-owned subsidiaries, unless otherwise stated. The Company assumes no obligation to revise or update any forward-looking statements for any reason, except as required by law.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "many_10k/2017-11-03/000032019317000070/a10-k20179302017.htm",
+    "change": "removed false footnote",
+    "marker": "(408)",
+    "text": "996-1010",
+    "review": "Contact/address line; manually inspected."
+  },
+  {
+    "document": "msft_8k/2013-09-20/000119312513372141/d600819d8k.htm",
+    "change": "removed false footnote",
+    "marker": "(425)",
+    "text": "882-8080",
+    "review": "Contact/address line; manually inspected."
+  },
+  {
+    "document": "10k_2025/batch_000009.tar::2025-03-31/000095017025047906/shco-20241229.htm",
+    "change": "prose demotion",
+    "text": "Management’s discussion and analysis of our financial condition and results of operations should be read in conjunction with our audited consolidated financial statements and related notes and other financial information included elsewhere in this Annual Report on Form 10-K. We have elected not to include a discussion of the earliest year. Such disclosure can be reviewed in Item 7of the prior filing. Such discussion is not directly comparable due to an inconsistent constant currency basis which uses a different factor to convert the 2021 financial information within the prior filing.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "10k_2025/batch_000009.tar::2025-03-31/000095017025047906/shco-20241229.htm",
+    "change": "prose demotion",
+    "text": "In addition to historical financial information, this discussion and other parts of this report contain forward-looking statements within the meaning of Section 27A of the Securities Act of 1933, as amended, and Section 21E of the Securities Exchange Act of 1934, as amended, based upon current expectations that involve risks and uncertainties. Our actual results could differ materially from those anticipated in these forward-looking statements as a result of various factors, including those set forth in the “Risk Factors” section in this Annual Report on Form 10-K. Forward-looking statements are not guarantees of future performance and are subject to risks and uncertainties that could cause actual results and events to differ from those anticipated. These statements are based upon information currently available to us, and while we believe such information forms a reasonable basis for such statements, such information may be limited or incomplete, and our statements should not be read to indicate that we have conducted an exhaustive inquiry into, or review of, all potentially available relevant information. These statements, like all statements in this report, speak only as of their date, and we undertake no obligation to update or revise these statements in light of future developments. These statements are inherently uncertain, and investors are cautioned not to unduly rely upon these statements.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/S-1_6636c92b/000100472413000055/2013-12-31/000100472413000055/forms-1123113.htm",
+    "change": "prose demotion",
+    "text": "This summary highlights certain information contained elsewhere in this prospectus or in the documents incorporated by reference into this prospectus.  It may not contain all of the information that is important to you or that you should consider before investing in our securities. Before making an investment decision, you should read this entire prospectus carefully, including “Risk Factors” and the documents incorporated by reference into this prospectus, which are described under “Where You Can Find More Information” and “Incorporation of Certain Information by Reference.”",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/S-1_6636c92b/000100472413000055/2013-12-31/000100472413000055/forms-1123113.htm",
+    "change": "prose demotion",
+    "text": "An investment in our securities involves a high degree of risk. You should carefully consider the risks and uncertainties described in this prospectus and the documents incorporated by reference into this prospectus, including the risks and uncertainties described in our Annual Report on Form 10-K for the year ended December 31, 2012 and our Quarterly Reports on Form 10-Q for the quarters ended March 31, 2013, June 30, 2013, and September 30, 2013.  The risks and uncertainties described in this prospectus and the documents incorporated by reference into this prospectus are not the only ones we face. Additional risks and uncertainties that we do not presently know about or that we currently believe are not material may also adversely affect our business, results of operations or financial condition. If any of the risks and uncertainties described in this prospectus or the documents incorporated by reference into this prospectus actually occurs, then our business, results of operations and financial condition could be adversely affected in a material way. This could cause the market price of the common stock to decline, perhaps significantly, and you may lose part or all of your investment.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/424B4_75d727af/000162828026067048/2026-10-23/000162828026067048/lyciatherapeutics-424b4.htm",
+    "change": "prose demotion",
+    "text": "This summary highlights selected information contained elsewhere in this prospectus and does not contain all of the information that you should consider in making your investment decision. Before investing in our common stock, you should carefully read this entire prospectus, including our financial statements and the related notes thereto and the information set forth under the sections titled “Risk Factors” and “Management’s Discussion and Analysis of Financial Condition and Results of Operations,” in each case included in this prospectus. Some of the statements in this prospectus constitute forward-looking statements that involve risks and uncertainties. See the section titled “Special Note Regarding Forward-Looking Statements” for additional information. Unless the context otherwise requires, we use the terms “Lycia Therapeutics, Inc.,” “Lycia,” the “Company,” “we,” “us” and “our” in this prospectus to refer to Lycia Therapeutics, Inc.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/424B4_75d727af/000162828026067048/2026-10-23/000162828026067048/lyciatherapeutics-424b4.htm",
+    "change": "prose demotion",
+    "text": "Investing in our common stock involves a high degree of risk. Before making your decision to invest in shares of our common stock, you should carefully consider the risks described below, together with the other information contained in this prospectus, including in the section titled “Management’s Discussion and Analysis of Financial Condition and Results of Operations” and in our audited financial statements, unaudited interim condensed financial statements and the related notes included elsewhere in this prospectus. The risks and uncertainties described below are not the only ones we face. Additional risks and uncertainties that we are unaware of or that we deem immaterial may also become important factors that adversely affect our business. We cannot assure you that any of the events discussed below will not occur. These events could have a material and adverse impact on our business, financial condition, results of operations and prospects. If that were to happen, the trading price of our common stock could decline, and you could lose all or part of your investment. These disclosures reflect our beliefs and opinions as to factors that could materially and adversely affect us and our securities in the future. References to past events are provided by way of example only and are not intended to be a complete listing or a representation as to whether or not such factors have occurred in the past or their likelihood of occurring in the future.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/424B4_75d727af/000162828026067048/2026-10-23/000162828026067048/lyciatherapeutics-424b4.htm",
+    "change": "prose demotion",
+    "text": "You should read the following discussion and analysis of financial condition and results of operations together with our audited financial statements, unaudited interim condensed financial statements and related notes included elsewhere in this prospectus. This discussion contains forward-looking statements based upon our current plans and expectations that involve risks, uncertainties and assumptions, including those described in the section titled “Special Note Regarding Forward-Looking Statements.” Our actual results and the timing of selected events could differ materially from those discussed in these forward-looking statements. Factors that could cause or contribute to such differences include, but are not limited to, those identified below and those set forth under the section titled “Risk Factors.” You should carefully read the section titled “Risk Factors” to gain an understanding of the important factors that could cause actual results to differ materially from our forward-looking statements.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/N-CSR_3fedd1fa/000005193123001401/2023-12-29/000005193123001401/afctd_ncsr.htm",
+    "change": "prose demotion",
+    "text": "Fund results shown are for Class 529-A shares and reflect\ndeduction of the maximum sales charge of 3.50% (2.50% for College Enrollment Fund) on a $10,000 investment.1 Thus,\nthe net amount invested was $9,650 ($9,750 for College Enrollment Fund). Results are for past periods and are not predictive of\nresults for future periods. Current and future results may be lower or higher than those shown. Prices and returns will vary, so\ninvestors may lose money. Investing for short periods makes losses more likely. For current information and month-end results,\nrefer to capitalgroup.com.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "structural_review/amzn-20241231.htm",
+    "change": "prose demotion",
+    "text": "This Annual Report on Form 10-K and the documents incorporated herein by reference contain forward-looking statements based on expectations, estimates, and projections as of the date of this filing. Actual results and outcomes may differ materially from those expressed in forward-looking statements. See Item 1A of Part I — “Risk Factors.” As used herein, “Amazon.com,” “we,” “our,” and similar terms include Amazon.com, Inc. and its subsidiaries, unless the context indicates otherwise.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "structural_review/amzn-20241231.htm",
+    "change": "prose demotion",
+    "text": "This Annual Report on Form 10-K includes forward-looking statements within the meaning of the Private Securities Litigation Reform Act of 1995. All statements other than statements of historical fact, including statements regarding guidance, industry prospects, or future results of operations or financial position, made in this Annual Report on Form 10-K are forward-looking. We use words such as anticipates, believes, expects, future, intends, and similar expressions to identify forward-looking statements. Forward-looking statements reflect management’s current expectations and are inherently uncertain. Actual results and outcomes could differ materially for a variety of reasons, including, among others, fluctuations in foreign exchange rates, changes in global economic conditions and customer demand and spending, inflation, interest rates, regional labor market constraints, world events, the rate of growth of the internet, online commerce, cloud services, and new and emerging technologies, the amount that Amazon.com invests in new business opportunities and the timing of those investments, the mix of products and services sold to customers, the mix of net sales derived from products as compared with services, the extent to which we owe income or other taxes, competition, management of growth, potential fluctuations in operating results, international growth and expansion, the outcomes of claims, litigation, government investigations, and other proceedings, fulfillment, sortation, delivery, and data center optimization, risks of inventory management, variability in demand, the degree to which we enter into, maintain, and develop commercial agreements, proposed and completed acquisitions and strategic transactions, payments risks, and risks of fulfillment throughput and productivity. In addition, global economic and geopolitical conditions and additional or unforeseen circumstances, developments, or events may give rise to or amplify many of these risks. These risks and uncertainties, as well as other risks and uncertainties that could cause our actual results or outcomes to differ significantly from management’s expectations, are described in greater detail in Item 1A of Part I, “Risk Factors.”",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "structural_review/amzn-20241231.htm",
+    "change": "prose demotion",
+    "text": "We expect spending in technology and infrastructure will increase over time as we add computer scientists, designers, software and hardware engineers, and merchandising employees. Our technology and infrastructure investment and capital spending projects often support a variety of product and service offerings due to geographic expansion and the cross-functionality of our systems and operations. We seek to invest efficiently in several areas of technology and infrastructure, including AWS, and expansion of new and existing product categories and service offerings, as well as in infrastructure to enhance the customer experience and improve our process efficiencies. ",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "structural_review/amzn-20241231.htm",
+    "change": "removed false footnote",
+    "marker": "(206)",
+    "text": "266-1000",
+    "review": "Contact/address line; manually inspected."
+  },
+  {
+    "document": "structural_review/amzn-20241231.htm",
+    "change": "removed false footnote",
+    "marker": "410",
+    "text": "Terry Avenue North Seattle, Washington 98109-5210",
+    "review": "Contact/address line; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/S-1_6636c92b/000119312523305583/2023-12-29/000119312523305583/d567008ds1.htm",
+    "change": "prose demotion",
+    "text": "Investing in our securities involves risks. Before you make a decision to buy our securities, in addition to the risks and uncertainties\ndiscussed above under “Cautionary Note Regarding Forward-Looking Statements,” you should carefully consider the specific risks set forth herein. If any of these risks actually occur, it may materially harm our business, financial\ncondition, liquidity and results of operations. As a result, the market price of our securities could decline, and you could lose all or part of your investment. Additionally, the risks and uncertainties described in this prospectus or any\nprospectus supplement are not the only risks and uncertainties that we face. Additional risks and uncertainties not presently known to us or that we currently believe to be immaterial may become material and adversely affect our business.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/S-1_6636c92b/000119312523305583/2023-12-29/000119312523305583/d567008ds1.htm",
+    "change": "prose demotion",
+    "text": "The following discussion and analysis of our financial condition and results of operations should be read in conjunction with our\nconsolidated financial statements and related notes that appear elsewhere in this prospectus, as well as the sections entitled “Business” and “Unaudited Pro Forma Condensed Combined Financial Information. In addition to historical\nconsolidated financial information, the following discussion contains forward-looking statements that reflect our plans, estimates and beliefs. Our actual results could differ materially from those discussed in the forward-looking statements.\nFactors that could cause or contribute to these differences include those discussed below and elsewhere particularly in the section titled “Risk Factors” and elsewhere in this prospectus.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/S-1_6636c92b/000119312523305583/2023-12-29/000119312523305583/d567008ds1.htm",
+    "change": "prose demotion",
+    "text": "Certain figures, such as interest rates and other percentages, included in this section have been rounded for ease of presentation.\nPercentage figures included in this section have not in all cases been calculated on the basis of such rounded figures but on the basis of such amounts prior to rounding. For this reason, percentage amounts in this section may vary slightly from\nthose obtained by performing the same calculations using the figures in our financial statements or in the associated text. Certain other amounts that appear in this section may similarly not sum due to rounding.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/S-1_6636c92b/000119312523305583/2023-12-29/000119312523305583/d567008ds1.htm",
+    "change": "removed false footnote",
+    "marker": "435",
+    "text": "Ericksen Ave, Suite 250 Bainbridge Island, Washington 98110 Tel: (206) 414-1777",
+    "review": "Contact/address line; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/S-3_23fab29e/000110465926118800/2026-10-26/000110465926118800/tm2628230d1_s3.htm",
+    "change": "prose demotion",
+    "text": "The following summary highlights\nselected information contained in this prospectus. Because the following is only a summary, it does not contain all of the information\nyou should consider before investing in our shares of common stock. Before making an investment decision, you should carefully read all\nof the information contained in this prospectus and the documents incorporated by reference, including the risks described under “Risk\nFactors” on page 4 herein and the Management’s Discussion and Analysis and our consolidated financial statements and\nthe related notes incorporated by reference from our latest annual report on Form 10-K for the fiscal year ended March 31, 2026.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/S-3_23fab29e/000110465926118800/2026-10-26/000110465926118800/tm2628230d1_s3.htm",
+    "change": "prose demotion",
+    "text": "Investing in our common\nstock involves a high degree of risk. You should carefully consider the following risk factors as well as the other information set forth\nin this prospectus and the documents incorporated by reference herein, before deciding whether to invest in our common stock. Additional\nrisks and uncertainties that we are unaware of may become important factors that affect us. If any of these risks actually occurs, our\nbusiness, financial condition and operating results may suffer, the trading price of our common stock could decline, and you may lose\nall or part of your investment.",
+    "review": "Prose passage; manually inspected."
+  },
+  {
+    "document": "sec_html_rules/10-Q_3ae38e4f/000002321713000008/2013-12-31/000002321713000008/cag10q2fy14.htm",
+    "change": "removed false footnote",
+    "marker": "(402)",
+    "text": "240-4000",
+    "review": "Contact/address line; manually inspected."
+  }
+]

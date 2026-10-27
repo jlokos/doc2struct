@@ -374,11 +374,34 @@ static int group(Document *d, Vec *lines) {
     }
     return !d->arena.error[0];
 }
+static Str line_text(Document *, Item *, size_t);
+static double font_stats(Document *, Vec *, int *);
+static int semantic_heading(const Run *run) {
+    return run->tag.n == 2 && run->tag.p[0] == 'h' &&
+           run->tag.p[1] >= '1' && run->tag.p[1] <= '6';
+}
 static int clean(Document *d, const Rules *r, Vec *lines) {
-    Map counts = {0};
+    Map counts = {0}, labels = {0};
+    Vec out = {0};
     Line *all = lines->p;
-    size_t i, j, k, out = 0;
-    for (i = 0; r->repeat_threshold && i < lines->n; i++)
+    size_t i, j, k, distinct_labels = 0;
+    int dominant = 0;
+    double common = r->page_label ? font_stats(d, lines, &dominant) : 0;
+    for (i = 0; r->page_label && i < lines->n; i++) {
+        Line *line = all + i;
+        Str text;
+        if (line->matrix.nr || line->listitem || !line->nitems || image(line->items))
+            continue;
+        text = ds_lower(&d->arena, ds_strip(line_text(d, line->items, line->nitems), 1));
+        if (ds_match(d, r->page_label, text, 0) && !ds_map_get(&labels, text)) {
+            if (!ds_map_put(&d->arena, &labels, text, line->items))
+                return 0;
+            distinct_labels++;
+        }
+    }
+    for (i = 0; r->repeat_threshold && i < lines->n; i++) {
+        if (all[i].matrix.nr || all[i].listitem)
+            continue;
         for (j = 0; j < all[i].nitems; j++) {
             Item *it = all[i].items + j;
             Str text = ds_lower(&d->arena, ds_strip(it->run.text, 1));
@@ -393,49 +416,76 @@ static int clean(Document *d, const Rules *r, Vec *lines) {
             }
             (*count)++;
         }
+    }
     for (i = 0; i < lines->n; i++) {
         Line line = all[i];
-        size_t kept = 0;
+        size_t start = 0;
+        int previous = -1, page_label = 0;
         if (line.matrix.nr || line.listitem) {
-            all[out++] = line;
+            if (!append_line(d, &out, line))
+                return 0;
             continue;
+        }
+        if (r->page_label && line.nitems && !image(line.items) &&
+            !semantic_heading(&line.items[0].run)) {
+            Run *first = &line.items[0].run;
+            int big = dominant && first->has_font && first->font > 1.2 * common;
+            int small = dominant && first->has_font && first->font < common;
+            if (!big && (small || distinct_labels >= 3)) {
+                Str text = ds_lower(&d->arena, ds_strip(line_text(d, line.items, line.nitems), 1));
+                page_label = ds_match(d, r->page_label, text, 0);
+            }
         }
         for (j = 0; j < line.nitems; j++) {
             Item it = line.items[j];
             Str text;
             size_t *count;
-            int remove = 0;
-            if (image(&it)) {
-                line.items[kept++] = it;
-                continue;
+            int redundant = 0;
+            if (!image(&it)) {
+                text = ds_lower(&d->arena, ds_strip(it.run.text, 1));
+                count = ds_map_get(&counts, text);
+                redundant = page_label || (count && r->repeat_threshold &&
+                    (r->repeat_threshold < 0 || *count >= (size_t)r->repeat_threshold));
+                for (k = 0; !redundant && k < r->nremove; k++)
+                    if ((!r->remove[k].needs_href || it.run.href.p) &&
+                        ds_match(d, r->remove[k].rx, text, 0))
+                        redundant = 1;
             }
-            text = ds_lower(&d->arena, ds_strip(it.run.text, 0));
-            count = ds_map_get(&counts, text);
-            if (count && r->repeat_threshold &&
-                (r->repeat_threshold < 0 || *count >= (size_t)r->repeat_threshold))
-                remove = 1;
-            for (k = 0; !remove && k < r->nremove; k++)
-                if ((!r->remove[k].needs_href || it.run.href.p) &&
-                    ds_match(d, r->remove[k].rx, text, 0))
-                    remove = 1;
-            if (!remove)
-                line.items[kept++] = it;
+            /* Preserve both sides of a mixed line, in source order. A matched
+             * piece must not discard its neighbors or promote them to headings. */
+            if (previous >= 0 && redundant != previous) {
+                Line part = line;
+                part.items += start;
+                part.nitems = j - start;
+                part.redundant = previous;
+                if (!append_line(d, &out, part))
+                    return 0;
+                start = j;
+            }
+            previous = redundant;
         }
-        line.nitems = kept;
-        if (kept)
-            all[out++] = line;
+        if (line.nitems) {
+            line.items += start;
+            line.nitems -= start;
+            line.redundant = previous;
+            if (!append_line(d, &out, line))
+                return 0;
+        }
     }
-    lines->n = out;
+    *lines = out;
     return !d->arena.error[0];
 }
 static double font_stats(Document *d, Vec *lines, int *dominant) {
     Map counts = {0};
-    size_t i, best = 0;
+    size_t i, best = 0, eligible = lines->n;
     double common = 0;
     Line *all = lines->p;
     *dominant = 0;
     for (i = 0; i < lines->n; i++)
-        if (all[i].nitems) {
+        if (all[i].redundant)
+            eligible--;
+    for (i = 0; i < lines->n; i++)
+        if (all[i].nitems && !all[i].redundant) {
             Item *f = all[i].items;
             size_t *count;
             Str key;
@@ -452,7 +502,7 @@ static double font_stats(Document *d, Vec *lines, int *dominant) {
         }
     /* Iterate in source order to preserve Python's first-seen tie breaking. */
     for (i = 0; i < lines->n; i++)
-        if (all[i].nitems) {
+        if (all[i].nitems && !all[i].redundant) {
             Item *f = all[i].items;
             size_t *count;
             if (image(f) || !f->run.has_font)
@@ -463,7 +513,7 @@ static double font_stats(Document *d, Vec *lines, int *dominant) {
                 common = f->run.font;
             }
         }
-    *dominant = best > lines->n * .5;
+    *dominant = best > eligible * .5;
     return common;
 }
 static unsigned attrs(Item *i) {
@@ -476,7 +526,6 @@ static unsigned attrs(Item *i) {
         flags |= FAKE_TABLE;
     return flags;
 }
-static Str line_text(Document *, Item *, size_t);
 static int phone_line(Document *d, Line *line) {
     Str first = line->nitems ? ds_strip(line->items[0].run.text, 0) : (Str){0};
     return first.n && first.p[0] == '(' && ds_phone(line_text(d, line->items, line->nitems));
@@ -590,6 +639,11 @@ static int split(Document *d, const Rules *r, Vec *lines) {
     size_t i;
     for (i = 0; i < lines->n; i++) {
         Line line = all[i];
+        if (line.redundant) {
+            if (!append_line(d, &out, line))
+                return 0;
+            continue;
+        }
         if (!line.layout_text && line.nitems && !image(line.items) && header_candidate(r, &line) &&
             header_match(d, r, &line, rule_text(d, &line)) >= 0) {
             /* Precise explicit section rules take precedence over inferred
@@ -615,6 +669,36 @@ static int split(Document *d, const Rules *r, Vec *lines) {
     *lines = out;
     return !d->arena.error[0];
 }
+/* Require evidence of multiple sentences before demoting long italic text.
+ * A single full-sentence risk heading must retain its heading status. */
+static int italic_prose(Document *d, Line *line, int big) {
+    Item *first = line->nitems ? line->items : NULL;
+    Str text;
+    size_t i, words = 0;
+    int in_word = 0;
+    if (!first || big || !(first->run.flags & ITALIC) ||
+        (first->run.flags & (BOLD | CENTERED | UNDERLINE)) || semantic_heading(&first->run))
+        return 0;
+    text = ds_strip(line_text(d, line->items, line->nitems), 1);
+    for (i = 0; i < text.n; i++) {
+        int space = text.p[i] == ' ' || text.p[i] == '\n' || text.p[i] == '\t';
+        if (!space && !in_word)
+            words++;
+        in_word = !space;
+    }
+    if (words < 28 || text.n < 160)
+        return 0;
+    for (i = 1; i + 2 < text.n; i++)
+        if ((text.p[i] == '.' || text.p[i] == '?' || text.p[i] == '!') &&
+            text.p[i + 1] == ' ' && text.p[i + 2] >= 'A' && text.p[i + 2] <= 'Z') {
+            size_t start = i;
+            while (start && text.p[start - 1] >= 'a' && text.p[start - 1] <= 'z')
+                start--;
+            if (i - start >= 3 && (!start || text.p[start - 1] == ' '))
+                return 1;
+        }
+    return 0;
+}
 static int classify(Document *d, const Rules *r, Vec *lines) {
     Line *all = lines->p;
     int dominant, predicted = 0, section = -1, attr_levels[128], next = 0;
@@ -633,6 +717,10 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
         Item *first = ln->nitems ? ln->items : NULL;
         ln->level = -1;
         ln->klass = ds_str("text");
+        if (ln->redundant) {
+            ln->klass = ds_str("redundant");
+            continue;
+        }
         if (ln->listitem) {
             ln->klass = ds_str("listitem");
             continue;
@@ -671,7 +759,8 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
                 ln->level = -2;
                 ln->klass = ds_str("textsmall");
                 ln->attrs = 0;
-            } else if (!ln->layout_text && (big || (ln->attrs & ~FAKE_TABLE)) && !phone_line(d, ln)) {
+            } else if (!ln->layout_text && (big || (ln->attrs & ~FAKE_TABLE)) &&
+                       !phone_line(d, ln) && !italic_prose(d, ln, big)) {
                 ln->level = predicted;
                 ln->klass = ds_str("predicted header");
                 ln->predicted = 1;
@@ -712,8 +801,14 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
                             upcoming = 1;
                             break;
                         }
-                    if (upcoming)
+                    if (upcoming) {
+                        ln.redundant = 1;
+                        ln.level = -1;
+                        ln.klass = ds_str("redundant");
+                        ln.title = (Str){0};
+                        all[kept++] = ln;
                         continue;
+                    }
                 }
                 for (q = active.n; q; q--)
                     if (parents[q - 1].level == ln.level) {
@@ -723,8 +818,14 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
                 if (previous && ds_eq(previous->title, ln.title) &&
                     ds_eq(previous->klass, ln.klass) &&
                     (continued || (bare && dominant && ln.items[0].run.has_font &&
-                                   ln.items[0].run.font < common)))
+                                   ln.items[0].run.font < common))) {
+                    ln.redundant = 1;
+                    ln.level = -1;
+                    ln.klass = ds_str("redundant");
+                    ln.title = (Str){0};
+                    all[kept++] = ln;
                     continue;
+                }
                 while (active.n && ((Line *)active.p)[active.n - 1].level >= ln.level)
                     active.n--;
                 slot = ds_push(&d->arena, &active, sizeof(Line));
@@ -740,7 +841,7 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
         Line *ln = all + i;
         if (ln->listitem)
             continue;
-        if (!ln->predicted && !ds_is(ln->klass, "text") && !ds_is(ln->klass, "textsmall")) {
+        if (!ln->predicted && ln->level >= 0) {
             if (ln->level <= section) {
                 for (j = 0; j < 128; j++)
                     attr_levels[j] = -1;
@@ -987,11 +1088,64 @@ static int build(Document *d, Vec *lines) {
     }
     return !d->arena.error[0];
 }
+static int same_title_style(const Row *a, const Row *b) {
+    const Run *x, *y;
+    if (!a->nitems || !b->nitems)
+        return 0;
+    x = &a->items[0].run;
+    y = &b->items[0].run;
+    return same(a->items, b->items) && x->has_indent == y->has_indent &&
+           (!x->has_indent || x->indent == y->indent);
+}
+enum { MERGE_TEXT, MERGE_TITLES };
+/* Titles use their first source run's formatting, as heading detection does.
+ * Merge them before table-title inheritance; compact prose after annotations.
+ * Every merge retains source items and links for custom columns. */
+static int merge_rows(Document *d, int kind) {
+    Row *rows = d->rows.p;
+    size_t i, j, k, out = 0;
+    for (i = 0; i < d->rows.n; i = j) {
+        Row block = rows[i];
+        j = i + 1;
+        int title = kind == MERGE_TITLES;
+        if (title ? ds_is(block.type, "title") :
+                    ds_is(block.type, "text") || ds_is(block.type, "textsmall")) {
+            while (j < d->rows.n && ds_eq(rows[j].type, block.type) &&
+                   rows[j].level == block.level &&
+                   (!title || same_title_style(&block, rows + j)))
+                j++;
+            if (j > i + 1) {
+                Vec parts = {0}, items = {0};
+                size_t row;
+                for (row = i; row < j; row++) {
+                    Str *part = ds_push(&d->arena, &parts, sizeof(Str));
+                    if (!part)
+                        return 0;
+                    *part = rows[row].text;
+                    for (k = 0; k < rows[row].nitems; k++) {
+                        Item *item = ds_push(&d->arena, &items, sizeof(Item));
+                        if (!item)
+                            return 0;
+                        *item = rows[row].items[k];
+                    }
+                }
+                block.text = ds_join(&d->arena, parts.p, parts.n, ds_str(" "));
+                block.items = items.p;
+                block.nitems = items.n;
+            }
+        }
+        block.id = out;
+        rows[out++] = block;
+    }
+    d->rows.n = out;
+    return !d->arena.error[0];
+}
 int ds_standardize(Document *d, const Rules *r) {
     Vec lines = d->flow ? d->lines : (Vec){0};
     d->retain_table_cells = r->unwrap_layout;
     d->collect_hrefs = r->collect_hrefs;
     return (d->flow || group(d, &lines)) && layout_tables(d, r, &lines) && ds_lists(d, &lines) &&
            clean(d, r, &lines) && split(d, r, &lines) &&
-           classify(d, r, &lines) && build(d, &lines) && ds_list_blocks(d) && ds_tables(d, r);
+           classify(d, r, &lines) && build(d, &lines) && ds_list_continuations(d, r) && ds_list_blocks(d) &&
+           merge_rows(d, MERGE_TITLES) && ds_tables(d, r) && merge_rows(d, MERGE_TEXT);
 }

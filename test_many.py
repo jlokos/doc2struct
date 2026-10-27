@@ -3,7 +3,7 @@ from pathlib import Path
 from time import perf_counter
 import tarfile
 
-directory = Path(r"C:\Users\jgfri\Documents\datamule\oss\packages\doc2struct\data\filings\10k_2025")
+directory = Path(r"C:\Users\jgfri\Documents\datamule\oss\packages\doc2struct\data\filings\msft_10k")
 
 def html_documents(directory):
     for path in sorted(directory.rglob("*")):

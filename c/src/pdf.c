@@ -1,5 +1,6 @@
 #include "pdf.h"
 #include "fpdf_text.h"
+#include "bridge.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,11 +40,16 @@ static pthread_mutex_t engine_lock = PTHREAD_MUTEX_INITIALIZER;
  X(int, FPDFText_GetFontWeight, (FPDF_TEXTPAGE, int)) \
  X(FPDF_BOOL, FPDFText_GetMatrix, (FPDF_TEXTPAGE, int, FS_MATRIX *)) \
  X(FPDF_BOOL, FPDFText_GetCharBox, (FPDF_TEXTPAGE, int, double *, double *, double *, double *)) \
- X(FPDF_BOOL, FPDFText_GetCharOrigin, (FPDF_TEXTPAGE, int, double *, double *))
+ X(FPDF_BOOL, FPDFText_GetCharOrigin, (FPDF_TEXTPAGE, int, double *, double *)) \
+ X(unsigned, DS_PDF_BridgeVersion, (void)) \
+ X(int, DS_PDF_ExtractPage, (FPDF_PAGE, DS_PDF_SINK, void *))
 #define DECLARE(result, name, args) static result (FPDF_CALLCONV *p_##name) args;
 PDF_FUNCTIONS(DECLARE)
 #undef DECLARE
 static char *engine_path;
+_Static_assert(sizeof(DS_PDF_GLYPH) == sizeof(doc2struct_pdf_glyph), "PDF bridge glyph size");
+_Static_assert(offsetof(DS_PDF_GLYPH, left) == offsetof(doc2struct_pdf_glyph, left), "PDF bridge geometry offset");
+_Static_assert(offsetof(DS_PDF_GLYPH, dy) == offsetof(doc2struct_pdf_glyph, dy), "PDF bridge direction offset");
 
 static int fail(doc2struct_error *error, const char *message) {
     if (error) snprintf(error->message, sizeof(error->message), "%s", message);
@@ -88,10 +94,13 @@ int doc2struct_pdfium_init(const char *path, doc2struct_error *error) {
 #endif
 #define LOAD(result, name, args) \
     p_##name = (result (FPDF_CALLCONV *) args)SYMBOL(name); \
-    if (!p_##name) { fail(error, "PDFium is missing " #name); goto done; }
+    if (!p_##name) { fail(error, "PDFium is missing " #name "; use the doc2struct PDFium build"); goto done; }
     PDF_FUNCTIONS(LOAD)
 #undef LOAD
 #undef SYMBOL
+    if (p_DS_PDF_BridgeVersion() != DS_PDF_BRIDGE_ABI) {
+        fail(error, "incompatible doc2struct PDFium bridge version"); goto done;
+    }
     p_FPDF_InitLibrary();
     engine_path = copy;
     copy = NULL;
@@ -202,6 +211,29 @@ static int extract_page(FPDF_PAGE page, FPDF_TEXTPAGE text,
     return 1;
 }
 
+typedef struct {
+    doc2struct_pdf_glyph **glyphs;
+    size_t *capacity;
+    doc2struct_pdf_page *page;
+} BridgeCopy;
+
+static int copy_bridge_glyphs(void *context, const DS_PDF_GLYPH *glyphs, size_t count) {
+    BridgeCopy *copy = context;
+    if (count > SIZE_MAX / sizeof(**copy->glyphs)) return 0;
+    if (count > *copy->capacity) {
+        void *replacement = realloc(*copy->glyphs, count * sizeof(**copy->glyphs));
+        if (!replacement) return 0;
+        *copy->glyphs = replacement;
+        *copy->capacity = count;
+    }
+    /* Own the view so public callbacks can run outside the PDFium mutex,
+     * including callbacks that recursively parse another document. */
+    if (count) memcpy(*copy->glyphs, glyphs, count * sizeof(**copy->glyphs));
+    copy->page->glyphs = *copy->glyphs;
+    copy->page->count = count;
+    return 1;
+}
+
 int doc2struct_pdf_visit(Str input, const char *password, doc2struct_pdf_page_sink sink,
                         void *context, doc2struct_error *error) {
     FPDF_DOCUMENT document = NULL;
@@ -228,6 +260,22 @@ int doc2struct_pdf_visit(Str input, const char *password, doc2struct_pdf_page_si
         ok = 0;
         view.index = (size_t)i;
         page = p_FPDF_LoadPage(document, i);
+        if (page) {
+            BridgeCopy copy = {&glyphs, &capacity, &view};
+            int fast;
+            view.width = p_FPDF_GetPageWidthF(page);
+            view.height = p_FPDF_GetPageHeightF(page);
+            fast = p_DS_PDF_ExtractPage(page, copy_bridge_glyphs, &copy);
+            if (fast < 0) { fail(error,"PDF bridge extraction failed"); goto done; }
+            if (fast > 0) {
+                p_FPDF_ClosePage(page); page = NULL;
+                UNLOCK();
+                ok = sink(context, &view);
+                LOCK();
+                if (!ok) { fail(error,"PDF page processing failed or was cancelled"); goto done; }
+                continue;
+            }
+        }
         if (page) text = p_FPDFText_LoadPage(page);
         if (!text || (count = p_FPDFText_CountChars(text)) < 0) {
             fail(error,"cannot extract PDF page"); goto done;

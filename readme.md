@@ -210,15 +210,12 @@ A custom column has:
 
 For example, an `href` column reads `href` from all instruction cells of a line, and an `item` column reads the number out of "Item 1A".
 
-# todo
-- missing some lists i think
-- have it improve document types as well
-- add pdf support (via doc2dict)
+## todo
 - add txt support (probably just newlines + custom tokenizer)
-- tell sol to improve rulesets - get confirmation first
-- generally just leave agents alone to imporve this
 
-- havving it add rulesets for smaller files - once done we're good
-- so next is pdf, then text
 - then general spot check and tell it ito imrpove . so e.g. do 10 10-ks, spot check, move on.
-- PGO?
+- have it do rulesets across pdf and text later -text epsecially
+
+**pgo**
+
+- optimize parsing speed based on corpus

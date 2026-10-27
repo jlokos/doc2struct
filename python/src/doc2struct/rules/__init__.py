@@ -21,7 +21,7 @@ from typing import Optional, Union
 
 from .. import _native
 
-from .types import (CustomColumn, HeaderRule, NormalizerOptions, RemoveRules, Rules, TableRules)
+from .types import (CustomColumn, HeaderRule, ListRules, NormalizerOptions, RemoveRules, Rules, TableRules)
 
 _PACKS = None
 
@@ -83,7 +83,7 @@ def _resolve(source) -> Rules:
 
 
 def merge(base: Rules, extra: Rules) -> Rules:
-    """extra's headers and columns are appended; extra's remove/tables replace base's when they are not default."""
+    """Append headers/columns; replace nondefault remove/tables/lists groups."""
     return Rules.from_dict(json.loads(_native.merge_rules(
         json.dumps(base.to_dict(), allow_nan=False), json.dumps(extra.to_dict(), allow_nan=False))))
 
@@ -95,5 +95,5 @@ def load_rules(source: Union[str, Path, dict, Rules], extend: Optional[Union[str
     return rules
 
 
-__all__ = ['load_rules', 'merge', 'list_namespaces', 'list_document_types', 'Rules', 'HeaderRule', 'RemoveRules', 'TableRules',
+__all__ = ['load_rules', 'merge', 'list_namespaces', 'list_document_types', 'Rules', 'HeaderRule', 'RemoveRules', 'TableRules', 'ListRules',
            'CustomColumn', 'NormalizerOptions']

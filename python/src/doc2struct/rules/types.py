@@ -8,8 +8,9 @@ from typing import List, Optional, Tuple
 
 from .defaults import (DEFAULT_FOOTNOTE_LINES, DEFAULT_FOOTNOTE_REGEX, DEFAULT_POSTAMBLE_LINES,
                        DEFAULT_PREAMBLE_LINES, DEFAULT_REPEAT_THRESHOLD, KNOWN_STYLES, KNOWN_TABLE_STEPS,
-                       RESERVED_COLUMNS, STANDARD_REMOVE, DEFAULT_SINGLE_ROW_TO_TEXT,
-                       DEFAULT_TITLE_FROM_SECTION, DEFAULT_UNWRAP_LAYOUT)
+                       RESERVED_COLUMNS, STANDARD_REMOVE, DEFAULT_SINGLE_ROW_TO_TEXT, DEFAULT_PAGE_LABEL_REGEX,
+                       DEFAULT_TITLE_FROM_SECTION, DEFAULT_UNWRAP_LAYOUT, DEFAULT_ANNOTATION_EXCLUDE_REGEX,
+                       DEFAULT_LIST_GAP_ROWS, DEFAULT_LIST_TAIL_ROWS)
 
 
 # -------------------------------------------------------------------------------------------- normalizer
@@ -30,18 +31,26 @@ class NormalizerOptions:
 # ------------------------------------------------------------------------------------ standardized text
 @dataclass(frozen=True)
 class RemoveRules:
+    """Legacy configuration name: matches are preserved as redundant rows.
+
+    Page-label candidates also require small type or repeated distinct labels;
+    semantic headings and large type are protected.
+    """
     patterns: Tuple[Tuple[str, bool], ...] = STANDARD_REMOVE   # (regex on lowercased text, only_if_link)
-    repeat_threshold: Optional[int] = DEFAULT_REPEAT_THRESHOLD  # drop text occurring this often; None = off
+    repeat_threshold: Optional[int] = DEFAULT_REPEAT_THRESHOLD  # mark text occurring this often; None = off
+    page_label_regex: Optional[str] = DEFAULT_PAGE_LABEL_REGEX  # candidate labels; None = off
 
     def to_dict(self):
-        return {'patterns': [list(p) for p in self.patterns], 'repeat_threshold': self.repeat_threshold}
+        return {'patterns': [list(p) for p in self.patterns], 'repeat_threshold': self.repeat_threshold,
+                'page_label_regex': self.page_label_regex}
 
     @classmethod
     def from_dict(cls, d):
         base = cls()
         pats = d.get('patterns')
         return cls(patterns=tuple((p[0], bool(p[1])) for p in pats) if pats is not None else base.patterns,
-                   repeat_threshold=d.get('repeat_threshold', base.repeat_threshold))
+                   repeat_threshold=d.get('repeat_threshold', base.repeat_threshold),
+                   page_label_regex=d.get('page_label_regex', base.page_label_regex))
 
 
 @dataclass(frozen=True)
@@ -72,12 +81,14 @@ class TableRules:
     preamble_lines: int = DEFAULT_PREAMBLE_LINES              # 0 = off
     postamble_lines: int = DEFAULT_POSTAMBLE_LINES            # 0 = off
     unwrap_layout: bool = DEFAULT_UNWRAP_LAYOUT  # unwrap prose tables containing explicit section headings
+    annotation_exclude_regex: Optional[str] = DEFAULT_ANNOTATION_EXCLUDE_REGEX  # keep matching contact lines as text
 
     def to_dict(self):
         return {'steps': list(self.steps), 'single_row_to_text': self.single_row_to_text,
                 'title_from_section': self.title_from_section, 'footnote_regex': self.footnote_regex,
                 'footnote_lines': self.footnote_lines, 'preamble_lines': self.preamble_lines,
-                'postamble_lines': self.postamble_lines, 'unwrap_layout': self.unwrap_layout}
+                'postamble_lines': self.postamble_lines, 'unwrap_layout': self.unwrap_layout,
+                'annotation_exclude_regex': self.annotation_exclude_regex}
 
     @classmethod
     def from_dict(cls, d):
@@ -89,7 +100,29 @@ class TableRules:
                    footnote_lines=int(d.get('footnote_lines', base.footnote_lines)),
                    preamble_lines=int(d.get('preamble_lines', base.preamble_lines)),
                    postamble_lines=int(d.get('postamble_lines', base.postamble_lines)),
-                   unwrap_layout=bool(d.get('unwrap_layout', base.unwrap_layout)))
+                   unwrap_layout=bool(d.get('unwrap_layout', base.unwrap_layout)),
+                   annotation_exclude_regex=d.get('annotation_exclude_regex', base.annotation_exclude_regex))
+
+
+@dataclass(frozen=True)
+class ListRules:
+    """Limits count source text rows before ordinary text merging.
+
+    Bridge matching rows between same-level list items, then allow a bounded
+    tail on that confirmed chain. Zero max_gap_rows disables inference; zero
+    max_tail_rows disables the tail. Matching uses payload style/font/indent.
+    """
+    max_gap_rows: int = DEFAULT_LIST_GAP_ROWS
+    max_tail_rows: int = DEFAULT_LIST_TAIL_ROWS
+
+    def to_dict(self):
+        return dict(self.__dict__)
+
+    @classmethod
+    def from_dict(cls, d):
+        base = cls()
+        return cls(max_gap_rows=int(d.get('max_gap_rows', base.max_gap_rows)),
+                   max_tail_rows=int(d.get('max_tail_rows', base.max_tail_rows)))
 
 
 @dataclass(frozen=True)
@@ -122,6 +155,7 @@ class Rules:
     remove: RemoveRules = field(default_factory=RemoveRules)
     tables: TableRules = field(default_factory=TableRules)
     columns: List[CustomColumn] = field(default_factory=list)
+    lists: ListRules = field(default_factory=ListRules)
 
     def validate(self):
         _native.prepare_rules(json.dumps(self.to_dict(), ensure_ascii=False, allow_nan=False))
@@ -129,7 +163,8 @@ class Rules:
 
     def to_dict(self):
         return {'name': self.name, 'headers': [h.to_dict() for h in self.headers], 'remove': self.remove.to_dict(),
-                'tables': self.tables.to_dict(), 'columns': [c.to_dict() for c in self.columns]}
+                'tables': self.tables.to_dict(), 'columns': [c.to_dict() for c in self.columns],
+                'lists': self.lists.to_dict()}
 
     @classmethod
     def from_dict(cls, d):
@@ -137,4 +172,5 @@ class Rules:
                    headers=[HeaderRule.from_dict(h) for h in d.get('headers', ())],
                    remove=RemoveRules.from_dict(d.get('remove', {})),
                    tables=TableRules.from_dict(d.get('tables', {})),
-                   columns=[CustomColumn.from_dict(c) for c in d.get('columns', ())]).validate()
+                   columns=[CustomColumn.from_dict(c) for c in d.get('columns', ())],
+                   lists=ListRules.from_dict(d.get('lists', {}))).validate()

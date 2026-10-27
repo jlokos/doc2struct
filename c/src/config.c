@@ -132,6 +132,9 @@ static Rules *compile(JValue *root,doc2struct_error *error) {
     sub=field(&r->arena,root,"remove",J_OBJECT,0);if(!sub)goto fail;
     x=ds_config_get(sub,"repeat_threshold");
     r->repeat_threshold=x&&x->type==J_NULL?0:number(r,x);
+    x=ds_config_get(sub,"page_label_regex");
+    if(x&&x->type!=J_NULL&&x->type!=J_STRING){bad(&r->arena,"invalid page_label_regex");goto fail;}
+    if(x&&x->type==J_STRING&&x->text.n){r->page_label=ds_regex(r,x->text,0);if(!r->page_label)goto fail;}
     v=field(&r->arena,sub,"patterns",J_ARRAY,0);if(!v)goto fail;
     r->nremove=v->count;r->remove=array(r,v->count,sizeof(Remove));if(!r->remove)goto fail;
     for(c=v->child,i=0;c;c=c->next,i++) {
@@ -152,6 +155,9 @@ static Rules *compile(JValue *root,doc2struct_error *error) {
     x=ds_config_get(sub,"footnote_regex");
     if(!x||(x->type!=J_NULL&&x->type!=J_STRING)){bad(&r->arena,"invalid footnote_regex");goto fail;}
     if(x->type==J_STRING&&x->text.n){r->footnote=ds_regex(r,x->text,0);if(!r->footnote)goto fail;}
+    x=ds_config_get(sub,"annotation_exclude_regex");
+    if(x&&x->type!=J_NULL&&x->type!=J_STRING){bad(&r->arena,"invalid annotation_exclude_regex");goto fail;}
+    if(x&&x->type==J_STRING&&x->text.n){r->annotation_exclude=ds_regex(r,x->text,0);if(!r->annotation_exclude)goto fail;}
     v=field(&r->arena,sub,"steps",J_ARRAY,0);if(!v)goto fail;
     for(c=v->child;c;c=c->next) {
         Str step=text(r,c);
@@ -159,6 +165,11 @@ static Rules *compile(JValue *root,doc2struct_error *error) {
         if(!ds_table_steps[j]){bad(&r->arena,"unknown table step");goto fail;}
         r->table_steps|=1u<<j;
     }
+    sub=field(&r->arena,root,"lists",J_OBJECT,0);if(!sub)goto fail;
+    r->list_gap_rows=number(r,field(&r->arena,sub,"max_gap_rows",J_NUMBER,0));
+    r->list_tail_rows=number(r,field(&r->arena,sub,"max_tail_rows",J_NUMBER,0));
+    if(r->list_gap_rows<0||r->list_tail_rows<0){bad(&r->arena,"list gaps must be nonnegative");goto fail;}
+    if(r->arena.error[0])goto fail;
     v=field(&r->arena,root,"columns",J_ARRAY,0);if(!v)goto fail;
     r->ncolumns=v->count;r->columns=array(r,v->count,sizeof(Column));if(!r->columns)goto fail;
     for(c=v->child,i=0;c;c=c->next,i++) {
@@ -225,7 +236,7 @@ char *doc2struct_rules_merge_json(Str base_json,Str extra_json,size_t *size,doc2
     Arena a={0};JValue *base,*extra,*defaults,*b,*x,*tail;Rules *r=NULL;
     Str json={0};char *out=NULL;size_t i;
     static const char *const append[]={"headers","columns"};
-    static const char *const replace[]={"remove","tables"};
+    static const char *const replace[]={"remove","tables","lists"};
     if(size)*size=0;if(error)error->message[0]=0;
     base=resolved(&a,base_json,0);extra=resolved(&a,extra_json,0);
     defaults=ds_config_parse(&a,doc2struct_defaults_json());
@@ -237,6 +248,8 @@ char *doc2struct_rules_merge_json(Str base_json,Str extra_json,size_t *size,doc2
         if(!b->child)b->child=x->child;
         else {for(tail=b->child;tail->next;tail=tail->next){}tail->next=x->child;}
         b->count+=x->count;
+    }
+    for(i=0;i<3;i++) {
         b=ds_config_get(base,replace[i]);x=ds_config_get(extra,replace[i]);
         if(!ds_config_equal(x,ds_config_get(defaults,replace[i]))) {
             JValue *next=b->next;*b=*x;b->next=next;

@@ -4,12 +4,20 @@
 #include <string.h>
 
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"line %d: %s (%s)\n",__LINE__,#x,error.message); return 1; } } while (0)
-typedef struct { size_t pages, glyphs; int cancel; } Seen;
+typedef struct { size_t pages, glyphs; int cancel, recurse; doc2struct_string input; } Seen;
 static int visit(void *context, const doc2struct_pdf_page *page) {
     Seen *seen=context;
     size_t i;
     if(seen->cancel) return 0;
     if(page->index!=seen->pages || page->width<=0 || page->height<=0) return 0;
+    if(seen->recurse && page->count) {
+        Seen child={0};
+        doc2struct_error error={{0}};
+        uint32_t first=page->glyphs[0].unicode;
+        seen->recurse=0;
+        if(!doc2struct_pdf_visit(seen->input,NULL,visit,&child,&error)) return 0;
+        if(child.pages!=3 || page->glyphs[0].unicode!=first) return 0;
+    }
     for(i=0;i<page->count;i++) {
         const doc2struct_pdf_glyph *g=page->glyphs+i;
         if(g->left>g->right || g->top>g->bottom || g->font<=0) return 0;
@@ -38,6 +46,7 @@ int main(int argc, char **argv) {
     rewind(file); data=malloc((size_t)length); CHECK(data);
     CHECK(fread(data,1,(size_t)length,file)==(size_t)length); fclose(file);
     input=(doc2struct_string){data,(size_t)length};
+    seen.input=input; seen.recurse=1;
     CHECK(doc2struct_pdf_visit(input,NULL,visit,&seen,&error));
     CHECK(seen.pages==3 && seen.glyphs>20);
     seen.cancel=1;

@@ -1,5 +1,6 @@
 """Native PDF checks. Run: python checks/python/pdf.py [--cli path/to/executable]."""
 import argparse
+import ctypes
 from concurrent.futures import ThreadPoolExecutor
 import json
 import os
@@ -84,6 +85,20 @@ def main():
     assert abs(italic[0]['font_size'] - 16) < .01
     mapped = ds.convert_pdf_to_instructions(fixture([text('AB', font='F4')]))
     assert ''.join(r['text'] for r in mapped).replace(' ', '') == '\u03a9\U0001f600', mapped
+    # Exercise the default bridge and its per-page fallback, without depending
+    # on PDFium's old line-end dehyphenation policy.
+    kerned=ds.convert_pdf_to_instructions(fixture(['BT /F1 12 Tf 50 700 Td [(one) -250 (two)] TJ ET']))
+    assert ''.join(r['text'] for r in kerned)=='one two'
+    hyphenated=ds.convert_pdf_to_instructions(fixture([text('forward-')+text('looking',y=684)]))
+    assert hyphenated[0]['text']=='forward-'
+    replacement=ds.convert_pdf_to_instructions(fixture(['/Span << /ActualText (Replacement) >> BDC '+text('Original')+'EMC']))
+    assert ''.join(r['text'] for r in replacement)=='Replacement'
+    library=next((Path(ds.__file__).parent/'_pdfium').glob('doc2struct_pdfium.*'))
+    engine=ctypes.CDLL(str(library))
+    assert engine.DS_PDF_BridgeVersion()==1
+    counters=(ctypes.c_uint64*4)()
+    engine.DS_PDF_GetStats(counters)
+    assert counters[1]>0 and counters[2]>0, 'bridge and fallback must both run'
     scaled = ds.convert_pdf_to_instructions(fixture(['q 2 0 0 2 0 0 cm ' + text('Scaled', y=300) + 'Q']))
     assert abs(scaled[0]['font_size'] - 32) < .01
     # Differently styled adjacent text objects must not invent a word boundary.

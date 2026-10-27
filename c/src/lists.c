@@ -56,6 +56,16 @@ static int marker_only(Str text) {
     return ds_list_marker(text, &length) && length == text.n;
 }
 
+static int bullet_decoration(Str text) {
+    size_t length, count = 0;
+    text = ds_strip(text, 1);
+    while (text.n && ds_list_marker(text, &length) == 1) {
+        count++;
+        text = ds_strip((Str){text.p + length, text.n - length}, 1);
+    }
+    return count > 1 && !text.n;
+}
+
 static int prose(Str text) {
     size_t i, k;
     for (i = 0; i < text.n; i += k) {
@@ -155,7 +165,8 @@ int ds_lists(Document *d, Vec *lines) {
             /* A rejected layout table may have extra financial cells. Only
              * the validated table path may combine a standalone marker cell. */
             int rejected_table = first->fake_table && text.n == length;
-            if (native || (kind && payload && !rejected_table &&
+            int decoration = kind == 1 && line.nitems == 1 && bullet_decoration(text);
+            if (native || (kind && payload && !rejected_table && !decoration &&
                            !(after_table && kind == 2))) {
                 line.listitem = 1;
                 line.list_kind = kind;
@@ -174,6 +185,99 @@ int ds_lists(Document *d, Vec *lines) {
             after_table = 0;
     }
     *lines = out;
+    return !d->arena.error[0];
+}
+
+/* Ignore a standalone marker's styling: continuation text belongs to the
+ * payload, including when the marker was a separate table cell or font run. */
+static const Run *payload_run(const Row *row) {
+    size_t i, length;
+    for (i = 0; i < row->nitems; i++) {
+        const Run *run = &row->items[i].run;
+        Str text = ds_strip(run->text, 1);
+        if (!text.n || run->src.p)
+            continue;
+        if (ds_is(row->type, "listitem") && ds_list_marker(text, &length) && length == text.n)
+            continue;
+        return run;
+    }
+    return NULL;
+}
+static int matching_payload(const Row *item, const Row *next) {
+    const Run *a = payload_run(item), *b = payload_run(next);
+    unsigned style = BOLD | ITALIC | UNDERLINE | CENTERED;
+    return item->level == next->level && a && b &&
+           (a->flags & style) == (b->flags & style) && a->has_font == b->has_font &&
+           (!a->has_font || a->font == b->font) && a->has_indent == b->has_indent &&
+           (!a->has_indent || a->indent == b->indent);
+}
+static int matching_text(const Row *item, const Row *next) {
+    return (ds_is(next->type, "text") || ds_is(next->type, "textsmall")) &&
+           matching_payload(item, next);
+}
+static int append_continuations(Document *d, Row *item, const Row *rows, size_t count) {
+    Vec parts = {0}, items = {0};
+    size_t i, j;
+    for (i = 0; i <= count; i++) {
+        const Row *source = i ? rows + i - 1 : item;
+        Str *text = ds_push(&d->arena, &parts, sizeof(Str));
+        if (!text)
+            return 0;
+        *text = source->text;
+        for (j = 0; j < source->nitems; j++) {
+            Item *run = ds_push(&d->arena, &items, sizeof(Item));
+            if (!run)
+                return 0;
+            *run = source->items[j];
+        }
+    }
+    item->text = ds_join(&d->arena, parts.p, parts.n, ds_str(" "));
+    item->items = items.p;
+    item->nitems = items.n;
+    return !d->arena.error[0];
+}
+/* Infer list/text/list gaps before grouping lists or compacting prose. A tail
+ * is permitted only after a positive gap confirmed that same-style chain.
+ * Capitalization and sentence punctuation play no part in this decision. */
+int ds_list_continuations(Document *d, const Rules *rules) {
+    Row *rows = d->rows.p;
+    size_t i, next, out = 0;
+    int confirmed = 0;
+    if (!rules->list_gap_rows)
+        return 1;
+    for (i = 0; i < d->rows.n; i = next) {
+        Row item = rows[i];
+        next = i + 1;
+        if (ds_is(item.type, "listitem")) {
+            size_t end = next, gap, take = 0;
+            int following_item;
+            while (end < d->rows.n && matching_text(&item, rows + end))
+                end++;
+            gap = end - next;
+            following_item = end < d->rows.n && ds_is(rows[end].type, "listitem") &&
+                             matching_payload(&item, rows + end);
+            if (following_item) {
+                if (gap <= (size_t)rules->list_gap_rows) {
+                    take = gap;
+                    if (gap)
+                        confirmed = 1;
+                } else
+                    confirmed = 0;  /* Reject the entire oversized gap. */
+            } else {
+                if (confirmed)
+                    take = gap < (size_t)rules->list_tail_rows ? gap : (size_t)rules->list_tail_rows;
+                confirmed = 0;
+            }
+            if (take) {
+                if (!append_continuations(d, &item, rows + next, take))
+                    return 0;
+                next += take;
+            }
+        } else
+            confirmed = 0;
+        rows[out++] = item;
+    }
+    d->rows.n = out;
     return !d->arena.error[0];
 }
 
