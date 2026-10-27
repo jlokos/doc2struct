@@ -3,13 +3,8 @@ import runpy
 import sys
 
 from setuptools import Extension, setup, find_packages
-from setuptools.command.build_ext import build_ext
 
-
-class BuildNative(build_ext):
-    def run(self):
-        runpy.run_path('c/generate_tables.py')['generate']('c/unicode_data.h')
-        super().run()
+BuildNative = runpy.run_path(str(Path(__file__).with_name('build_support.py')))['BuildNative']
 
 
 pcre = Path('c/vendor/pcre2')

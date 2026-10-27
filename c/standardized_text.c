@@ -29,7 +29,7 @@ typedef struct {
 } Ref;
 typedef struct {
     Str text;
-    Run *first, *font, *indent, *href;
+    Run *first, *font, *indent, *href, *image;
     size_t row, col, rs, cs, index;
     unsigned flags;
     Vec *hrefs;
@@ -167,6 +167,8 @@ static int table_line(Document *d, Run *runs, size_t n, Line *out) {
                 c->indent = r;
             if (r->href.p)
                 c->href = r;
+            if (r->src.p)
+                c->image = r;
             if (!ds_keep_href(d, &c->hrefs, r->href))
                 return 0;
         }
@@ -204,6 +206,7 @@ static int table_line(Document *d, Run *runs, size_t n, Line *out) {
                 Cell *c = cells + i;
                 items[i].run = *c->first;
                 items[i].run.text = c->text;
+                items[i].run.src = c->image ? c->image->src : (Str){0};
                 items[i].run.flags = c->flags;
                 items[i].run.href = c->href ? c->href->href : (Str){0};
                 items[i].hrefs = c->hrefs;

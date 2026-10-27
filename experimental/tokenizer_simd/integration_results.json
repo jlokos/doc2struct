@@ -1,0 +1,245 @@
+{
+  "method": "preloaded inputs; one warmup pass; variants alternate per file; all six order permutations balanced across each six rounds; includes output disposal; excludes I/O and rules preparation",
+  "affinity": {
+    "logical_cpu": 4,
+    "efficiency_class": 1,
+    "core_classes": [
+      [
+        1,
+        3
+      ],
+      [
+        1,
+        12
+      ],
+      [
+        1,
+        48
+      ],
+      [
+        1,
+        192
+      ],
+      [
+        1,
+        768
+      ],
+      [
+        1,
+        3072
+      ],
+      [
+        1,
+        12288
+      ],
+      [
+        1,
+        49152
+      ],
+      [
+        0,
+        65536
+      ],
+      [
+        0,
+        131072
+      ],
+      [
+        0,
+        262144
+      ],
+      [
+        0,
+        524288
+      ],
+      [
+        0,
+        1048576
+      ],
+      [
+        0,
+        2097152
+      ],
+      [
+        0,
+        4194304
+      ],
+      [
+        0,
+        8388608
+      ]
+    ]
+  },
+  "files": 146,
+  "bytes": 434667246,
+  "samples": {
+    "baseline": [
+      0.8975502000539564,
+      0.9136511001270264,
+      0.8982565001351759,
+      0.914019699615892,
+      0.9007699003559537,
+      0.9127740996773355,
+      0.8930041000130586,
+      0.8984146000002511,
+      0.9080190998502076,
+      0.9131559001980349,
+      0.9244071001885459,
+      0.9559409000212327
+    ],
+    "integrated_plain": [
+      0.8733374002040364,
+      0.8969228002824821,
+      0.8881422998965718,
+      0.8817719004000537,
+      0.8754358998849057,
+      0.8775142000522465,
+      0.8665358997532167,
+      0.8796765000442974,
+      0.8648757002083585,
+      0.8972594001679681,
+      0.9135441998951137,
+      0.9313761001685634
+    ],
+    "integrated_pgo": [
+      0.810270499845501,
+      0.8213425002177246,
+      0.8103144002961926,
+      0.8203898000065237,
+      0.8088982998742722,
+      0.8226569999824278,
+      0.802893600135576,
+      0.8190478998585604,
+      0.8004586999304593,
+      0.8165406000916846,
+      0.861475900223013,
+      0.8806542996899225
+    ]
+  },
+  "median_paired_speedup": {
+    "baseline": 1.0,
+    "integrated_plain": 1.0270495940251898,
+    "integrated_pgo": 1.110888066986392
+  },
+  "parity": {
+    "variants": [
+      "integrated_plain",
+      "integrated_scalar",
+      "integrated_pgo"
+    ],
+    "generated_token_cases": 17729,
+    "corpus_token_files": 146,
+    "corpus_parse_files": 146
+  },
+  "extended_parity": {
+    "variants": [
+      "integrated_plain",
+      "integrated_scalar",
+      "integrated_pgo"
+    ],
+    "generated_parse_cases": 3556,
+    "extra_filings": [
+      {
+        "path": "data\\filings\\test_work\\1-K_0001213900-25-037678\\2025-04-30\\000121390025037678\\ea0239752-1k_2020biolabs.htm",
+        "sha256": "bb241fe44f37cb3337521ab5f6994886e322593b0725685c6210f3b0ec99d437"
+      },
+      {
+        "path": "data\\filings\\test_work\\1-SA_0001683168-25-004432\\2025-06-12\\000168316825004432\\liquidpiston_1sa.htm",
+        "sha256": "b86e9cb9407a9d799fecd92711adbc1a9374408aae839ea8fd2c9cd7db0bc9eb"
+      },
+      {
+        "path": "data\\filings\\test_work\\10-D_0001193125-25-081335\\2025-04-15\\000119312525081335\\d921428d10d.htm",
+        "sha256": "238cbc76552a9b60263ef42dcf01123c6973bc689fa1938c9846a9b7c9f64287"
+      },
+      {
+        "path": "data\\filings\\test_work\\10-K_0000320193-25-000079\\2025-10-31\\000032019325000079\\aapl-20250927.htm",
+        "sha256": "274361a794f84b24d75b4ee98bc8eff5a031b4fc1be1a1210dbc2b10d92c5179"
+      },
+      {
+        "path": "data\\filings\\test_work\\10-Q_0000950170-25-064417\\2025-05-06\\000095017025064417\\mfin-20250331.htm",
+        "sha256": "d6aaded58342c4b02d6033c42b21188c02d18de29abcc42c45700d95dbb9759d"
+      },
+      {
+        "path": "data\\filings\\test_work\\20-F_0001140361-25-015768\\2025-04-25\\000114036125015768\\ef20038949_20f.htm",
+        "sha256": "b8763d5c610b2282af6093dd3185763752a7f67c3f2a5727aaac5ceb84008d6f"
+      },
+      {
+        "path": "data\\filings\\test_work\\20-F_0001140361-25-016316\\2025-04-29\\000114036125016316\\ef20039042_20f.htm",
+        "sha256": "48301a73b93e3ec4788e8e0ce8e90f200f3e8495eea408057d666a4b0c4e290f"
+      },
+      {
+        "path": "data\\filings\\test_work\\8-A12B_0001104659-25-051541\\2025-05-21\\000110465925051541\\tm2515739d2_8a12b.htm",
+        "sha256": "378a1016d1368d89059ce1475c4db84d4ac4946cf0aad5dceddab08b7ec47f9b"
+      },
+      {
+        "path": "data\\filings\\test_work\\8-A12G_0001096906-25-000835\\2025-05-16\\000109690625000835\\cbds_8a.htm",
+        "sha256": "807be82c1acb30b9834e22e9580fcf19feddc3e4541045efc85eb7b012744728"
+      },
+      {
+        "path": "data\\filings\\test_work\\8-K12B_0001193125-25-152807\\2025-06-30\\000119312525152807\\d936172d8k12b.htm",
+        "sha256": "1c852abc399c410d846d920cb2b541a95aa466a319d374b89c5f3a1d3b1c8f36"
+      },
+      {
+        "path": "data\\filings\\test_work\\DSTRBRPT_0001193125-25-076186\\2025-04-09\\000119312525076186\\d823827ddstrbrpt.htm",
+        "sha256": "e4ccbb7831d412de14d96034f3530a3fc03d796d26e01679081034a0c1f789a1"
+      },
+      {
+        "path": "data\\filings\\test_work\\EX-99.CERT_0001193125-25-134542\\2025-06-04\\000119312525134542\\d945773dex99cert.htm",
+        "sha256": "dfdf669d797fe4d769636238d0afbc81d65142b221a8c0f2a72517657fa5f092"
+      },
+      {
+        "path": "data\\filings\\test_work\\N-CSRS_0000100334-25-000064\\2025-06-27\\000010033425000064\\ck0000100334-20250430.htm",
+        "sha256": "04bfc45f0b64708da2b8220da5c35ac0bb60581ab088131accd97a33e6bb7541"
+      },
+      {
+        "path": "data\\filings\\test_work\\S-1_0001437749-25-013165\\2025-04-25\\000143774925013165\\bkyi20250410_s1.htm",
+        "sha256": "4ea7f9252cc177acf5c999bec1019178ad186fc629a500772c2ab1b87f0cf705"
+      },
+      {
+        "path": "data\\filings\\test_work\\S-1_0001683168-25-004741\\2025-06-24\\000168316825004741\\athbitcoin_is1.htm",
+        "sha256": "20750bce240c9e47984f9599f3bb3e629c4fe35e79582f86f58123f8fa168152"
+      },
+      {
+        "path": "data\\filings\\test_work\\SC_13D_0001493152-24-044359\\2024-11-08\\000149315224044359\\formsc13d.htm",
+        "sha256": "5ff956a2a026891c6bba53174c7f3c6dc56a0f5707b59c7add916dc05dab308e"
+      },
+      {
+        "path": "data\\filings\\test_work\\SC_13E3_0001292814-25-002491\\2025-06-25\\000129281425002491\\elp20250618_sc13e3.htm",
+        "sha256": "c7e31dea30603f22166d76f6536c96d740e08e855cdecd6eaf44901d0a23c193"
+      },
+      {
+        "path": "data\\filings\\test_work\\SC_13G_0000354204-24-004734\\2024-10-31\\000035420424004734\\SEC13G_Filing.htm",
+        "sha256": "418d2ffd093db9121dcaa1894770fc5dc18538e0d0d722ec3b5ebbfa16cc8f03"
+      },
+      {
+        "path": "data\\filings\\test_work\\SC_13G_0001193125-24-255288\\2024-11-12\\000119312524255288\\d839680dsc13g.htm",
+        "sha256": "7db28fa2bb2760d7773280c1ba41e1d78d959eaa8fb89b01cfad82c9c3490085"
+      },
+      {
+        "path": "data\\filings\\test_work\\SD_0001437749-25-017428\\2025-05-16\\000143774925017428\\occ20250514_sd.htm",
+        "sha256": "6b97a849ebd7aa37d2373cd8f0508b405b62e56411aafc35f504084bd11f6d51"
+      },
+      {
+        "path": "data\\filings\\test_work\\T-3_0001193125-25-074866\\2025-04-08\\000119312525074866\\d925286dt3.htm",
+        "sha256": "e3b9eb0234b554dadceb26948e31d6dab3765dd6ef7efb1306ca92fa14987da3"
+      },
+      {
+        "path": "data\\filings\\test_work\\T-3_0001193805-25-000910\\2025-06-18\\000119380525000910\\e664642_t3-gghi.htm",
+        "sha256": "f14ee853bfae891e2e90ae9efd8eec1fefda6c5f9184606a74e63667932805ad"
+      }
+    ],
+    "extra_configurations_per_filing": 2
+  },
+  "source_distribution_wheel_build": "passed",
+  "failed_pgo_training_preserves_installed_binary": "passed",
+  "production_sources": {
+    "c/tokenizer.c": "15ec926e9ea816c5aba8df844d609177dcad4beb8befe3a00c8447d7ff318aa3",
+    "setup.py": "12300eb4072df46d87d57ef698953110135d298fb91b99cf94b25a3d5cdf366e",
+    "build_support.py": "3d9b6b34afa59f1fcf486b6fcf99a2b8c338441491fdbb7f6ddef8a7343d5abd",
+    "MANIFEST.in": "16713a7d023e2b3ec8917faba9136907a5f32c7a39015740018b8dad72a50ba2"
+  },
+  "installed_extension": {
+    "path": "doc2struct\\_native.cp314-win_amd64.pyd",
+    "sha256": "3317338e087a8cb11d9eb664736bae9f490006b380ed6235beb17ad013655432"
+  }
+}

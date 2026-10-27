@@ -10,7 +10,7 @@ typedef struct {
 
 typedef struct {
     size_t row, col, rs, cs, line, records, parts, head, tail, bytes;
-    Str text, href;
+    Str text, href, image_src;
     double font, indent;
     unsigned flags;
     int has_font, has_indent, font_float, indent_float;
@@ -209,6 +209,7 @@ static int table_run(Flow *flow, const Run *run) {
     cell->line = run->line;
     cell->records++;
     if (run->src.p) {
+        cell->image_src = run->src;
         Str parts[] = {ds_str("[ALT: "), run->text, ds_str(". SRC: "), run->src, ds_str("]")};
         return cell_part(flow, cell, ds_join(&d->arena, parts, 5, ds_str("")));
     }
@@ -277,6 +278,7 @@ static int table_finish(Flow *flow, Line *line) {
                 FlowCell *cell = cells + i;
                 Run *run = &items[i].run;
                 run->text = cell->text;
+                run->src = cell->image_src;
                 run->row = cell->row;
                 run->col = cell->col;
                 run->rowspan = cell->rs;
