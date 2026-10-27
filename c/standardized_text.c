@@ -28,94 +28,148 @@ typedef struct {
     size_t index;
 } Ref;
 typedef struct {
-    Item item;
+    Str text;
+    Run *first, *font, *indent, *href;
     size_t row, col, rs, cs, index;
+    unsigned flags;
 } Cell;
 static int compare_ref(const void *a, const void *b) {
     const Ref *x = a, *y = b;
-#define CMP(field)                                                                                 \
-    if (x->run->field != y->run->field)                                                            \
-    return x->run->field < y->run->field ? -1 : 1
-    CMP(row);
-    CMP(col);
-    CMP(line);
-#undef CMP
+    if (x->run->row != y->run->row)
+        return x->run->row < y->run->row ? -1 : 1;
+    if (x->run->col != y->run->col)
+        return x->run->col < y->run->col ? -1 : 1;
+    if (x->run->line != y->run->line)
+        return x->run->line < y->run->line ? -1 : 1;
     return x->index < y->index ? -1 : x->index > y->index;
 }
 static int compare_cell(const void *a, const void *b) {
     const Cell *x = a, *y = b;
     return x->index < y->index ? -1 : x->index > y->index;
 }
-static int table_line(Document *d, Run *runs, size_t n, Line *out) {
-    Ref *refs;
-    Vec cells = {0};
-    size_t i, j, maxr = 0, maxc = 0, meaningful = 0, lastrow = 0;
-    Item *grid;
-    Vec items = {0};
-    refs = ds_alloc(&d->arena, n * sizeof(Ref));
-    if (!refs)
-        return 0;
-    for (i = 0; i < n; i++)
-        refs[i] = (Ref){runs + i, i};
-    qsort(refs, n, sizeof(Ref), compare_ref);
-    for (i = 0; i < n; i = j) {
-        Cell *c = ds_push(&d->arena, &cells, sizeof(Cell));
-        Vec texts = {0};
-        size_t q, k;
-        if (!c)
-            return 0;
-        c->row = refs[i].run->row;
-        c->col = refs[i].run->col;
-        c->rs = refs[i].run->rowspan;
-        c->cs = refs[i].run->colspan;
-        c->index = refs[i].index;
-        c->item.run = *refs[i].run;
-        c->item.run.flags = 0;
-        c->item.run.has_font = c->item.run.has_indent = 0;
-        c->item.run.href = (Str){0};
-        c->item.run.src = (Str){0};
-        for (j = i; j < n && refs[j].run->row == c->row && refs[j].run->col == c->col; j++)
-            if (refs[j].index < c->index) {
-                c->index = refs[j].index;
-                c->rs = refs[j].run->rowspan;
-                c->cs = refs[j].run->colspan;
-            }
-        for (q = i; q < j; q = k) {
-            Vec parts = {0};
-            for (k = q; k < j && refs[k].run->line == refs[q].run->line; k++) {
-                Run *r = refs[k].run;
-                Str text = r->text, *p;
-                if (r->src.p) {
-                    Str fragments[] = {ds_str("[ALT: "), r->text, ds_str(". SRC: "), r->src,
-                                       ds_str("]")};
-                    text = ds_join(&d->arena, fragments, 5, ds_str(""));
-                }
-                p = ds_push(&d->arena, &parts, sizeof(Str));
-                if (!p)
-                    return 0;
-                *p = text;
-                c->item.run.flags |= r->flags;
-                if (r->has_font) {
-                    c->item.run.font = r->font;
-                    c->item.run.has_font = 1;
-                    c->item.run.font_float = r->font_float;
-                }
-                if (r->has_indent) {
-                    c->item.run.indent = r->indent;
-                    c->item.run.has_indent = 1;
-                    c->item.run.indent_float = r->indent_float;
-                }
-                if (r->href.p)
-                    c->item.run.href = r->href;
-            }
-            {
-                Str *p = ds_push(&d->arena, &texts, sizeof(Str));
-                if (!p)
-                    return 0;
-                *p = ds_join(&d->arena, parts.p, parts.n, ds_str(""));
-            }
+static Run *cell_run(Run *runs, Ref *refs, size_t i) { return refs ? refs[i].run : runs + i; }
+static Str cell_text(Document *d, Run *runs, Ref *refs, size_t i, size_t end) {
+    size_t k, total = 0, pos = 0, parts = 0, last_line = 0;
+    Str only = ds_str("");
+    char *out;
+    for (k = i; k < end; k++) {
+        Run *r = cell_run(runs, refs, k);
+        size_t add = r->text.n;
+        if (k > i && r->line != last_line) {
+            if (total == SIZE_MAX)
+                goto large;
+            total++;
+            parts++;
         }
-        c->item.run.text = ds_strip(ds_join(&d->arena, texts.p, texts.n, ds_str("\n")), 1);
+        if (r->src.p) {
+            if (add > SIZE_MAX - r->src.n - 14)
+                goto large;
+            add += r->src.n + 14;
+            parts += 5;
+        } else if (add) {
+            parts++;
+            only = r->text;
+        }
+        if (add > SIZE_MAX - total - 1)
+            goto large;
+        total += add;
+        last_line = r->line;
+    }
+    if (!total)
+        return ds_str("");
+    if (parts == 1)
+        return ds_strip(only, 1);
+    out = ds_alloc_uninit(&d->arena, total + 1);
+    if (!out)
+        return (Str){0};
+    for (k = i; k < end; k++) {
+        Run *r = cell_run(runs, refs, k);
+        if (k > i && r->line != cell_run(runs, refs, k - 1)->line)
+            out[pos++] = '\n';
+        if (r->src.p) {
+            memcpy(out + pos, "[ALT: ", 6);
+            pos += 6;
+        }
+        if (r->text.n) {
+            memcpy(out + pos, r->text.p, r->text.n);
+            pos += r->text.n;
+        }
+        if (r->src.p) {
+            memcpy(out + pos, ". SRC: ", 7);
+            pos += 7;
+            if (r->src.n) {
+                memcpy(out + pos, r->src.p, r->src.n);
+                pos += r->src.n;
+            }
+            out[pos++] = ']';
+        }
+    }
+    out[pos] = 0;
+    return ds_strip((Str){out, pos}, 1);
+large:
+    snprintf(d->arena.error, sizeof(d->arena.error), "table cell text too large");
+    return (Str){0};
+}
+static int table_line(Document *d, Run *runs, size_t n, Line *out) {
+    Ref *refs = NULL;
+    Cell *cells, **grid;
+    size_t ncells = 0, i, j, k, maxr = 0, maxc = 0, meaningful = 0, lastrow = 0;
+    for (i = 1; i < n; i++) {
+        Run *a = runs + i - 1, *b = runs + i;
+        if (a->row > b->row ||
+            (a->row == b->row && (a->col > b->col || (a->col == b->col && a->line > b->line))))
+            break;
+    }
+    if (i < n) {
+        refs = ds_alloc_uninit(&d->arena, n * sizeof(Ref));
+        if (!refs)
+            return 0;
+        for (i = 0; i < n; i++)
+            refs[i] = (Ref){runs + i, i};
+        qsort(refs, n, sizeof(Ref), compare_ref);
+    }
+    for (i = 0; i < n; i = j) {
+        Run *r = cell_run(runs, refs, i);
+        for (j = i + 1; j < n; j++) {
+            Run *x = cell_run(runs, refs, j);
+            if (x->row != r->row || x->col != r->col)
+                break;
+        }
+        ncells++;
+    }
+    cells = ds_alloc(&d->arena, ncells * sizeof(Cell));
+    if (!cells)
+        return 0;
+    for (i = 0, k = 0; i < n; i = j, k++) {
+        Run *first = cell_run(runs, refs, i);
+        Cell *c = cells + k;
+        c->first = first;
+        c->row = first->row;
+        c->col = first->col;
+        c->rs = first->rowspan;
+        c->cs = first->colspan;
+        c->index = refs ? refs[i].index : i;
+        for (j = i; j < n; j++) {
+            Run *r = cell_run(runs, refs, j);
+            size_t index = refs ? refs[j].index : j;
+            if (r->row != c->row || r->col != c->col)
+                break;
+            if (index < c->index) {
+                c->index = index;
+                c->rs = r->rowspan;
+                c->cs = r->colspan;
+            }
+            c->flags |= r->flags;
+            if (r->has_font)
+                c->font = r;
+            if (r->has_indent)
+                c->indent = r;
+            if (r->href.p)
+                c->href = r;
+        }
+        c->text = cell_text(d, runs, refs, i, j);
+        if (!c->text.p)
+            return 0;
         if (c->row > SIZE_MAX - c->rs || c->col > SIZE_MAX - c->cs)
             goto large;
         if (c->row + c->rs > maxr)
@@ -123,50 +177,72 @@ static int table_line(Document *d, Run *runs, size_t n, Line *out) {
         if (c->col + c->cs > maxc)
             maxc = c->col + c->cs;
     }
-    if (maxc && maxr > SIZE_MAX / maxc / sizeof(Item))
+    if (maxc && maxr > SIZE_MAX / maxc / sizeof(Str))
         goto large;
-    grid = ds_alloc(&d->arena, maxr * maxc * sizeof(Item));
+    grid = ds_alloc(&d->arena, maxr * maxc * sizeof(Cell *));
     if (!grid)
         return 0;
-    for (i = 0; i < maxr * maxc; i++)
-        grid[i].run.text = ds_str("");
-    qsort(cells.p, cells.n, sizeof(Cell), compare_cell);
-    for (i = 0; i < cells.n; i++) {
-        Cell *c = (Cell *)cells.p + i;
+    for (i = 1; i < ncells; i++)
+        if (cells[i - 1].index > cells[i].index)
+            break;
+    if (i < ncells)
+        qsort(cells, ncells, sizeof(Cell), compare_cell);
+    for (i = 0; i < ncells; i++) {
+        Cell *c = cells + i;
         size_t y, x;
         for (y = 0; y < c->rs; y++)
             for (x = 0; x < c->cs; x++)
-                grid[(c->row + y) * maxc + c->col + x] = c->item;
+                grid[(c->row + y) * maxc + c->col + x] = c;
     }
     for (i = 0; i < maxr; i++) {
-        int found = 0;
         for (j = 0; j < maxc; j++)
-            if (grid[i * maxc + j].run.text.n) {
-                found = 1;
+            if (grid[i * maxc + j] && grid[i * maxc + j]->text.n)
                 break;
-            }
-        if (found) {
+        if (j < maxc) {
             meaningful++;
             lastrow = i;
         }
     }
     if (meaningful == 1) {
-        for (j = 0; j < maxc; j++) {
-            Item item = grid[lastrow * maxc + j];
-            if (item.run.text.n) {
-                item.fake_table = 1;
-                if (!append_item(d, &items, item))
-                    return 0;
+        size_t count = 0;
+        Item *items;
+        for (j = 0; j < maxc; j++)
+            if (grid[lastrow * maxc + j] && grid[lastrow * maxc + j]->text.n)
+                count++;
+        items = ds_alloc(&d->arena, count * sizeof(Item));
+        if (!items)
+            return 0;
+        for (j = 0, k = 0; j < maxc; j++) {
+            Cell *c = grid[lastrow * maxc + j];
+            Item *item;
+            if (!c || !c->text.n)
+                continue;
+            item = items + k++;
+            item->fake_table = 1;
+            item->run = *c->first;
+            item->run.text = c->text;
+            item->run.src = (Str){0};
+            item->run.flags = c->flags;
+            item->run.has_font = c->font != NULL;
+            item->run.has_indent = c->indent != NULL;
+            item->run.href = c->href ? c->href->href : (Str){0};
+            if (c->font) {
+                item->run.font = c->font->font;
+                item->run.font_float = c->font->font_float;
+            }
+            if (c->indent) {
+                item->run.indent = c->indent->indent;
+                item->run.indent_float = c->indent->indent_float;
             }
         }
-        out->items = items.p;
-        out->nitems = items.n;
+        out->items = items;
+        out->nitems = count;
     } else if (meaningful) {
-        Str *texts = ds_alloc(&d->arena, maxr * maxc * sizeof(Str));
+        Str *texts = ds_alloc_uninit(&d->arena, maxr * maxc * sizeof(Str));
         if (!texts)
             return 0;
         for (i = 0; i < maxr * maxc; i++)
-            texts[i] = grid[i].run.text;
+            texts[i] = grid[i] ? grid[i]->text : ds_str("");
         out->matrix = (Matrix){texts, maxr, maxc};
     }
     return !d->arena.error[0];
@@ -453,17 +529,26 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
     return !d->arena.error[0];
 }
 static Str line_text(Document *d, Item *items, size_t n) {
-    Vec parts = {0};
-    size_t i;
+    size_t i, count = 0;
+    Str *parts;
     int fake = n && items[0].fake_table;
     for (i = 0; i < n; i++)
-        if (!image(items + i)) {
-            Str *p = ds_push(&d->arena, &parts, sizeof(Str));
-            if (!p)
-                return (Str){0};
-            *p = fake ? ds_strip(items[i].run.text, 0) : items[i].run.text;
-        }
-    return ds_join(&d->arena, parts.p, parts.n, fake ? ds_str(" ") : ds_str(""));
+        if (!image(items + i))
+            count++;
+    if (!count)
+        return ds_str("");
+    if (count == 1) {
+        for (i = 0; i < n; i++)
+            if (!image(items + i))
+                return fake ? ds_strip(items[i].run.text, 0) : items[i].run.text;
+    }
+    parts = ds_alloc_uninit(&d->arena, count * sizeof(Str));
+    if (!parts)
+        return (Str){0};
+    for (i = 0, count = 0; i < n; i++)
+        if (!image(items + i))
+            parts[count++] = fake ? ds_strip(items[i].run.text, 0) : items[i].run.text;
+    return ds_join(&d->arena, parts, count, fake ? ds_str(" ") : ds_str(""));
 }
 static Row *add_row(Document *d, size_t level, Str type, Str klass) {
     Row *r = ds_push(&d->arena, &d->rows, sizeof(Row));
@@ -521,8 +606,15 @@ static int build(Document *d, Vec *lines) {
         if (text.n) {
             Vec items = {0};
             for (j = 0; j < ln->nitems; j++)
-                if (!image(ln->items + j) && !append_item(d, &items, ln->items[j]))
-                    return 0;
+                if (image(ln->items + j))
+                    break;
+            if (j == ln->nitems) {
+                items.p = ln->items;
+                items.n = ln->nitems;
+            } else
+                for (j = 0; j < ln->nitems; j++)
+                    if (!image(ln->items + j) && !append_item(d, &items, ln->items[j]))
+                        return 0;
             r = add_row(d, stack.n - 1, ln->klass, ln->klass);
             if (!r)
                 return 0;
@@ -543,7 +635,7 @@ static int build(Document *d, Vec *lines) {
     return !d->arena.error[0];
 }
 int ds_standardize(Document *d, const Rules *r) {
-    Vec lines = {0};
-    return group(d, &lines) && clean(d, r, &lines) && split(d, &lines) && classify(d, r, &lines) &&
-           build(d, &lines) && ds_tables(d, r);
+    Vec lines = d->flow ? d->lines : (Vec){0};
+    return (d->flow || group(d, &lines)) && clean(d, r, &lines) && split(d, &lines) &&
+           classify(d, r, &lines) && build(d, &lines) && ds_tables(d, r);
 }

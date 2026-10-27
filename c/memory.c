@@ -21,7 +21,24 @@ Str ds_str(const char *s) {
 }
 int ds_eq(Str a, Str b) { return a.n == b.n && (!a.n || !memcmp(a.p, b.p, a.n)); }
 int ds_is(Str a, const char *s) { return a.p && ds_eq(a, ds_str(s)); }
-void *ds_alloc(Arena *a, size_t n) {
+static Block *pool_take(ArenaPool *pool, size_t capacity) {
+    Block **link, **best = NULL, *block;
+    if (!pool || !pool->blocks)
+        return NULL;
+    for (link = &pool->blocks; *link; link = &(*link)->next)
+        if ((*link)->cap >= capacity && (!best || (*link)->cap < (*best)->cap)) {
+            best = link;
+            if ((*link)->cap == capacity)
+                break;
+        }
+    if (!best)
+        return NULL;
+    block = *best;
+    *best = block->next;
+    pool->bytes -= sizeof(Block) + block->cap;
+    return block;
+}
+void *ds_alloc_uninit(Arena *a, size_t n) {
     Block *b = a->blocks;
     size_t align = sizeof(Alignment), cap;
     if (a->error[0])
@@ -31,7 +48,11 @@ void *ds_alloc(Arena *a, size_t n) {
     n = (n + align - 1) / align * align;
     if (!b || n > b->cap - b->used) {
         cap = n > 65536 ? n : 65536;
-        b = malloc(sizeof(Block) + cap);
+        b = pool_take(a->pool, cap);
+        if (b)
+            cap = b->cap;
+        else
+            b = malloc(sizeof(Block) + cap);
         if (!b)
             goto oom;
         b->next = a->blocks;
@@ -42,21 +63,42 @@ void *ds_alloc(Arena *a, size_t n) {
     {
         void *p = b->data + b->used;
         b->used += n;
-        memset(p, 0, n);
         return p;
     }
 oom:
     snprintf(a->error, sizeof(a->error), "out of memory");
     return NULL;
 }
+void *ds_alloc(Arena *a, size_t n) {
+    void *p = ds_alloc_uninit(a, n);
+    if (p)
+        memset(p, 0, n);
+    return p;
+}
 void ds_arena_free(Arena *a) {
     Block *b = a->blocks;
     while (b) {
         Block *next = b->next;
-        free(b);
+        size_t bytes = sizeof(Block) + b->cap;
+        if (a->pool && bytes <= a->pool->limit && a->pool->bytes <= a->pool->limit - bytes) {
+            b->next = a->pool->blocks;
+            a->pool->blocks = b;
+            a->pool->bytes += bytes;
+        } else
+            free(b);
         b = next;
     }
     a->blocks = NULL;
+}
+void ds_pool_clear(ArenaPool *pool) {
+    Block *block = pool->blocks;
+    while (block) {
+        Block *next = block->next;
+        free(block);
+        block = next;
+    }
+    pool->blocks = NULL;
+    pool->bytes = 0;
 }
 void *ds_push(Arena *a, Vec *v, size_t width) {
     if (v->n == v->cap) {
@@ -66,21 +108,34 @@ void *ds_push(Arena *a, Vec *v, size_t width) {
             snprintf(a->error, sizeof(a->error), "array too large");
             return NULL;
         }
-        p = ds_alloc(a, cap * width);
+        p = ds_alloc_uninit(a, cap * width);
         if (!p)
             return NULL;
         if (v->n)
             memcpy(p, v->p, v->n * width);
+        memset((char *)p + v->n * width, 0, (cap - v->n) * width);
         v->p = p;
         v->cap = cap;
     }
     return (char *)v->p + v->n++ * width;
 }
 static uint64_t hash(Str s) {
-    uint64_t h = 1469598103934665603ULL;
-    size_t i;
-    for (i = 0; i < s.n; i++)
-        h = (h ^ (unsigned char)s.p[i]) * 1099511628211ULL;
+    uint64_t h = 0x9e3779b97f4a7c15ULL ^ (uint64_t)s.n, word;
+    size_t i = 0;
+    /* Compare complete keys after hashing; process unaligned words without
+     * imposing alignment or aliasing requirements on input slices. */
+    for (; s.n - i >= 8; i += 8) {
+        memcpy(&word, s.p + i, 8);
+        h = (h ^ word) * 0x9e3779b185ebca87ULL;
+        h ^= h >> 29;
+    }
+    word = 0;
+    if (i < s.n)
+        memcpy(&word, s.p + i, s.n - i);
+    h = (h ^ word) * 0xc2b2ae3d27d4eb4fULL;
+    h ^= h >> 33;
+    h *= 0xff51afd7ed558ccdULL;
+    h ^= h >> 33;
     return h ? h : 1;
 }
 void *ds_map_get(Map *m, Str k) {
@@ -129,7 +184,7 @@ int ds_map_put(Arena *a, Map *m, Str k, void *value) {
     return 1;
 }
 Str ds_copy(Arena *a, Str s) {
-    char *p = ds_alloc(a, s.n + 1);
+    char *p = ds_alloc_uninit(a, s.n + 1);
     if (!p)
         return (Str){0};
     if (s.n)
@@ -139,22 +194,31 @@ Str ds_copy(Arena *a, Str s) {
 }
 Str ds_cat(Arena *a, Str x, Str y) {
     char *p;
+    if (!x.n)
+        return y.p ? y : ds_str("");
+    if (!y.n)
+        return x;
     if (x.n > SIZE_MAX - y.n - 1) {
         snprintf(a->error, sizeof(a->error), "text too large");
         return (Str){0};
     }
-    p = ds_alloc(a, x.n + y.n + 1);
+    p = ds_alloc_uninit(a, x.n + y.n + 1);
     if (!p)
         return (Str){0};
     if (x.n)
         memcpy(p, x.p, x.n);
     if (y.n)
         memcpy(p + x.n, y.p, y.n);
+    p[x.n + y.n] = 0;
     return (Str){p, x.n + y.n};
 }
 Str ds_join(Arena *a, Str *parts, size_t n, Str sep) {
     size_t i, total = 0, pos = 0;
     char *p;
+    if (!n)
+        return ds_str("");
+    if (n == 1)
+        return parts[0].p ? parts[0] : ds_str("");
     for (i = 0; i < n; i++) {
         if (parts[i].n > SIZE_MAX - total - sep.n - 1) {
             snprintf(a->error, sizeof(a->error), "text too large");
@@ -162,7 +226,7 @@ Str ds_join(Arena *a, Str *parts, size_t n, Str sep) {
         }
         total += parts[i].n + (i ? sep.n : 0);
     }
-    p = ds_alloc(a, total + 1);
+    p = ds_alloc_uninit(a, total + 1);
     if (!p)
         return (Str){0};
     for (i = 0; i < n; i++) {
@@ -175,6 +239,7 @@ Str ds_join(Arena *a, Str *parts, size_t n, Str sep) {
             pos += parts[i].n;
         }
     }
+    p[total] = 0;
     return (Str){p, total};
 }
 void ds_document_free(Document *d) {

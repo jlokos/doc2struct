@@ -1,12 +1,14 @@
 #include "doc2struct.h"
+#include "tags.h"
+#include "scan.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
 #include <stdio.h>
 
 typedef struct {
-    Str tag, href;
-    unsigned flags;
+    Str tag, href, block_tag;
+    unsigned flags, props;
     double font, indent;
     int has_font, has_indent, suppressed, hides, act, root;
 } Frame;
@@ -19,6 +21,7 @@ typedef struct {
         cs;
     size_t *occupied, occupied_cap;
 } Normalizer;
+static double rounded(double);
 static int member(Str t, const char *names) {
     const char *p = names;
     while (*p) {
@@ -32,7 +35,7 @@ static int member(Str t, const char *names) {
     }
     return 0;
 }
-static int line_end(Str t) { return member(t, "p div h1 h2 h3 h4 h5 h6 li"); }
+
 static double px(Str s) {
     char buf[96];
     size_t i = 0, n;
@@ -93,7 +96,7 @@ static double left_box(Str s) {
     size_t n = words(s, p, 5);
     return n == 4 ? px(p[3]) : n == 2 || n == 3 ? px(p[1]) : px(s);
 }
-static Style *style(Document *d, Str raw) {
+Style *ds_style(Document *d, Str raw) {
     static const char *keys[] = {"font-weight", "font-style",  "text-decoration", "text-align",
                                  "font-size",   "text-indent", "padding",         "padding-left",
                                  "margin",      "margin-left", "display",         "visibility",
@@ -168,6 +171,9 @@ static Style *style(Document *d, Str raw) {
     st->font = px(values[4]);
     st->indent =
         px(values[5]) + left_box(values[6]) + px(values[7]) + left_box(values[8]) + px(values[9]);
+    st->has_indent = st->indent != 0;
+    st->font = rounded(st->font);
+    st->indent = rounded(st->indent);
     st->display_none = ds_is(values[10], "none");
     st->vis_hidden = member(values[11], "hidden collapse");
     if (!ds_map_put(&d->arena, &d->styles, raw, st))
@@ -185,19 +191,17 @@ static void break_line(Normalizer *n) {
         n->line_open = 0;
         n->line++;
     }
+    n->d->skip_blank = 1;
 }
 static int emit(Normalizer *n, Str text, Str src, int blank) {
-    Run *r;
+    Run value = {0}, *r = &value;
     Frame *frames = n->stack.p, *f = n->stack.n ? frames + n->stack.n - 1 : NULL;
-    size_t i;
     if (!n->line_open) {
         n->line_open = 1;
+        n->d->skip_blank = 0;
         if (!n->cell)
             n->cur_block = n->next_block++;
     }
-    r = ds_push(&n->d->arena, &n->d->runs, sizeof(Run));
-    if (!r)
-        return 0;
     r->block = n->cell ? n->table_block : n->cur_block;
     r->line = n->line;
     r->text = text;
@@ -213,82 +217,83 @@ static int emit(Normalizer *n, Str text, Str src, int blank) {
     }
     if (!blank && f) {
         r->flags = f->flags;
-        r->font = rounded(f->font);
-        r->indent = rounded(f->indent);
+        r->font = f->font;
+        r->indent = f->indent;
         r->has_font = f->has_font;
         r->has_indent = f->has_indent;
         r->href = f->href;
-        for (i = n->stack.n; i; i--)
-            if (line_end(frames[i - 1].tag) || member(frames[i - 1].tag, "td th")) {
-                r->tag = frames[i - 1].tag;
-                break;
-            }
+        r->tag = f->block_tag;
     }
+    if (n->d->flow)
+        return ds_flow_run(n->d, r);
+    r = ds_push(&n->d->arena, &n->d->runs, sizeof(Run));
+    if (!r)
+        return 0;
+    *r = value;
     return 1;
 }
 static int pop(Normalizer *n) {
-    Frame f = ((Frame *)n->stack.p)[--n->stack.n];
-    if (f.hides)
+    Frame *f = (Frame *)n->stack.p + --n->stack.n;
+    if (f->hides) {
         n->hidden--;
-    if (f.suppressed)
+        n->d->skip_text = !n->in_body || n->hidden;
+    }
+    if (f->suppressed)
         return 1;
-    if (line_end(f.tag))
+    if (f->props & T_LINE)
         break_line(n);
-    else if (member(f.tag, "td th")) {
-        if (f.act && n->table && n->cell) {
+    else if (f->props & T_CELL) {
+        if (f->act && n->table && n->cell) {
             if (!n->emitted && !emit(n, ds_str(""), (Str){0}, 1))
                 return 0;
             n->cell = 0;
             break_line(n);
         }
-    } else if (ds_is(f.tag, "tr")) {
-        if (f.act && n->table) {
+    } else if (f->props & T_TR) {
+        if (f->act && n->table) {
             n->row++;
             n->col = 0;
         }
-    } else if (ds_is(f.tag, "table")) {
+    } else if (f->props & T_TABLE) {
         n->table_depth--;
         break_line(n);
-        if (f.root) {
+        if (f->root) {
             n->table = 0;
             n->cell = 0;
         }
     }
     return 1;
 }
-static int pop_open(Normalizer *n, const char *names, const char *stop) {
+static int pop_open(Normalizer *n, unsigned names, unsigned stop) {
     Frame *frames = n->stack.p;
     size_t i;
     for (i = n->stack.n; i; i--) {
-        Str tag = frames[i - 1].tag;
-        if (member(tag, names)) {
+        unsigned props = frames[i - 1].props;
+        if (props & names) {
             while (n->stack.n >= i)
                 if (!pop(n))
                     return 0;
             return 1;
         }
-        if (member(tag, stop))
+        if (props & stop)
             return 1;
     }
     return 1;
 }
-static int implied(Normalizer *n, Str t) {
-    if (member(t, "address article aside blockquote center details dialog dir div dl dd dt "
-                  "fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr li "
-                  "main menu nav ol p pre section summary table ul") &&
-        !pop_open(n, "p", "table td th body html"))
+static int implied(Normalizer *n, unsigned props) {
+    if ((props & T_P_CLOSE) && !pop_open(n, T_P, T_TABLE | T_CELL | T_BODY_HTML))
         return 0;
-    if (ds_is(t, "li"))
-        return pop_open(n, "li", "ul ol table");
-    if (member(t, "dt dd"))
-        return pop_open(n, "dt dd", "dl table");
-    if (member(t, "td th"))
-        return pop_open(n, "td th", "tr table");
-    if (ds_is(t, "tr"))
-        return pop_open(n, "td th", "tr table") && pop_open(n, "tr", "table");
-    if (member(t, "thead tbody tfoot"))
-        return pop_open(n, "td th", "tr table") && pop_open(n, "tr", "table") &&
-               pop_open(n, "thead tbody tfoot", "table");
+    if (props & T_LI)
+        return pop_open(n, T_LI, T_LIST | T_TABLE);
+    if (props & T_DTDD)
+        return pop_open(n, T_DTDD, T_DL | T_TABLE);
+    if (props & T_CELL)
+        return pop_open(n, T_CELL, T_TR | T_TABLE);
+    if (props & T_TR)
+        return pop_open(n, T_CELL, T_TR | T_TABLE) && pop_open(n, T_TR, T_TABLE);
+    if (props & T_SECTION)
+        return pop_open(n, T_CELL, T_TR | T_TABLE) && pop_open(n, T_TR, T_TABLE) &&
+               pop_open(n, T_SECTION, T_TABLE);
     return 1;
 }
 static size_t span(Str s, size_t cap) {
@@ -313,6 +318,7 @@ void *ds_normalizer(Document *d, Options o) {
     if (n) {
         n->d = d;
         n->options = o;
+        d->skip_text = d->skip_blank = 1;
     }
     return n;
 }
@@ -323,21 +329,32 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
     Frame *f;
     int hides;
     size_t i;
+    unsigned props;
     if (d->arena.error[0])
         return 0;
     if (kind == TEXT) {
-        if (!n->in_body || n->hidden || !tag.n || (!n->line_open && !ds_strip(tag, 1).n))
+        if (!n->in_body || n->hidden || !tag.n ||
+            (!n->line_open && ds_blank_text(tag.p, tag.n)))
             return 1;
         return emit(n, tag, (Str){0}, 0);
     }
+    if (kind == END && n->stack.n) {
+        Frame *top = (Frame *)n->stack.p + n->stack.n - 1;
+        if (ds_eq(top->tag, tag)) {
+            if (top->props & T_BODY_HTML)
+                return 1;
+            return pop(n);
+        }
+    }
+    props = ds_tag_flags(tag);
     if (kind == END) {
-        const char *stop;
-        if (!n->in_body || ds_void(tag) || member(tag, "body html"))
+        unsigned stop;
+        if (!n->in_body || (props & (T_VOID | T_BODY_HTML)))
             return 1;
-        stop = member(tag, "td th")                  ? "tr table"
-               : member(tag, "tr thead tbody tfoot") ? "table"
-               : ds_is(tag, "table")                 ? ""
-                                                     : "table td th";
+        stop = (props & T_CELL)               ? T_TR | T_TABLE
+               : (props & (T_TR | T_SECTION)) ? T_TABLE
+               : (props & T_TABLE)            ? 0
+                                              : T_TABLE | T_CELL;
         for (i = n->stack.n; i; i--) {
             Str t = ((Frame *)n->stack.p)[i - 1].tag;
             if (ds_eq(t, tag)) {
@@ -346,50 +363,50 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
                         return 0;
                 return 1;
             }
-            if (member(t, stop))
+            if (((Frame *)n->stack.p)[i - 1].props & stop)
                 return 1;
         }
         return 1;
     }
     if (!n->in_body) {
-        if (member(tag, "html head title meta link base style script noscript"))
+        if (props & T_HEAD)
             return 1;
         n->in_body = 1;
+        d->skip_text = n->hidden != 0;
     }
     if (a->value[A_STYLE].n) {
-        st = style(d, a->value[A_STYLE]);
+        st = a->prepared_style ? a->prepared_style : ds_style(d, a->value[A_STYLE]);
         if (!st)
             return 0;
     }
     hides = (st && (st->display_none || (n->options.hide_visibility && st->vis_hidden))) ||
             (n->options.hide_hidden_attr && a->value[A_HIDDEN].p);
-    if (ds_void(tag)) {
+    if (props & T_VOID) {
         if (n->hidden || hides)
             return 1;
-        if (ds_is(tag, "br"))
+        if (props & T_BR)
             break_line(n);
-        else if (ds_is(tag, "img"))
+        else if (props & T_IMG)
             return emit(n, a->value[A_ALT].p ? a->value[A_ALT] : ds_str(""),
                         a->value[A_SRC].p ? a->value[A_SRC] : ds_str(""), 0);
         return 1;
     }
-    if (!implied(n, tag))
+    if (!implied(n, props))
         return 0;
     {
-        Frame inherited = {0};
-        if (n->stack.n)
-            inherited = ((Frame *)n->stack.p)[n->stack.n - 1];
         f = ds_push(&d->arena, &n->stack, sizeof(Frame));
         if (!f)
             return 0;
-        *f = (Frame){0};
-        f->flags = inherited.flags;
-        f->font = inherited.font;
-        f->indent = inherited.indent;
-        f->has_font = inherited.has_font;
-        f->has_indent = inherited.has_indent;
-        f->href = inherited.href;
+        /* Read the parent after growth, which can relocate the stack. */
+        if (n->stack.n > 1)
+            *f = ((Frame *)n->stack.p)[n->stack.n - 2];
+        else
+            *f = (Frame){0};
+        f->suppressed = f->hides = f->act = f->root = 0;
         f->tag = tag;
+        f->props = props;
+        if (props & T_BLOCK)
+            f->block_tag = tag;
     }
     if (n->hidden) {
         f->suppressed = 1;
@@ -398,6 +415,7 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
     if (hides) {
         f->suppressed = f->hides = 1;
         n->hidden++;
+        d->skip_text = 1;
         return 1;
     }
     if (st) {
@@ -406,20 +424,20 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
             f->font = st->font;
             f->has_font = 1;
         }
-        if (st->indent != 0) {
+        if (st->has_indent) {
             f->indent = st->indent;
             f->has_indent = 1;
         }
     }
-    if (member(tag, "b strong"))
+    if (props & T_BOLD)
         f->flags |= BOLD;
-    else if (member(tag, "i em"))
+    else if (props & T_ITALIC)
         f->flags |= ITALIC;
-    else if (member(tag, "u ins"))
+    else if (props & T_UNDER)
         f->flags |= UNDERLINE;
-    else if (ds_is(tag, "a"))
+    else if (props & T_A)
         f->href = a->value[A_HREF].p ? a->value[A_HREF] : ds_str("");
-    if (ds_is(tag, "table")) {
+    if (props & T_TABLE) {
         n->table_depth++;
         break_line(n);
         if (n->table_depth == 1) {
@@ -431,9 +449,9 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
             if (n->occupied)
                 memset(n->occupied, 0, n->occupied_cap * sizeof(size_t));
         }
-    } else if (member(tag, "tr td th")) {
+    } else if (props & (T_TR | T_CELL)) {
         f->act = n->table && n->table_depth == 1;
-        if (f->act && !ds_is(tag, "tr")) {
+        if (f->act && !(props & T_TR)) {
             size_t needed;
             break_line(n);
             while (n->col < n->occupied_cap && n->occupied[n->col] > n->row)
@@ -477,5 +495,5 @@ int ds_normalize_finish(void *ctx) {
     while (n->stack.n)
         if (!pop(n))
             return 0;
-    return !n->d->arena.error[0];
+    return n->d->flow ? ds_flow_finish(n->d) : !n->d->arena.error[0];
 }

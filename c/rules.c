@@ -97,6 +97,35 @@ Regex *ds_regex(Rules *r, Str pattern, int caseless) {
         return NULL;
     }
     pcre2_pattern_info(rx->code, PCRE2_INFO_CAPTURECOUNT, &rx->groups);
+    /* A conservative reject-only guard for an anchored mandatory first atom.
+     * Unsupported constructs always use PCRE2; successful matches still use
+     * PCRE2 so captures, Unicode behavior, and error handling stay unchanged. */
+    rx->caseless = caseless != 0;
+    if (pattern.n > 1 && pattern.p[0] == '^') {
+        size_t pos, atom_end = 2;
+        unsigned char first = (unsigned char)pattern.p[1];
+        int supported = 1;
+        for (pos = 1; pos < pattern.n; pos++) {
+            if (pattern.p[pos] == '|') {
+                supported = 0;
+                break;
+            }
+            if (pos + 2 < pattern.n && pattern.p[pos] == '(' && pattern.p[pos + 1] == '?' &&
+                !strchr("=!<:#>P", pattern.p[pos + 2])) {
+                supported = 0;
+                break;
+            }
+        }
+        if (first == '\\' && pattern.n > 2 && pattern.p[2] == 'd') {
+            atom_end = 3;
+            if (supported && (atom_end == pattern.n || !strchr("?*{", pattern.p[atom_end])))
+                rx->first_digit = 1;
+        } else if (supported && ((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') ||
+                                 (first >= '0' && first <= '9') || first == '_' || first == '-')) {
+            if (atom_end == pattern.n || !strchr("?*{", pattern.p[atom_end]))
+                rx->first_ascii = (unsigned)first + 1;
+        }
+    }
     rx->next = r->regexes;
     r->regexes = rx;
     return rx;
@@ -106,6 +135,21 @@ int ds_match(Document *d, Regex *rx, Str text, int search) {
     size_t need;
     if (!rx)
         return 0;
+    if (!search && (rx->first_ascii || rx->first_digit)) {
+        unsigned char first;
+        if (!text.n)
+            return 0;
+        first = (unsigned char)text.p[0];
+        if (first < 128) {
+            if (rx->first_digit && (first < '0' || first > '9'))
+                return 0;
+            if (rx->first_ascii) {
+                unsigned expected = rx->first_ascii - 1;
+                if (rx->caseless ? ((first | 32u) != (expected | 32u)) : first != expected)
+                    return 0;
+            }
+        }
+    }
     need = (size_t)rx->groups + 1;
     if (need > d->match_pairs) {
         pcre2_match_data *next = pcre2_match_data_create((uint32_t)need, NULL);
@@ -119,7 +163,7 @@ int ds_match(Document *d, Regex *rx, Str text, int search) {
         d->match_pairs = need;
     }
     rc = pcre2_match(rx->code, (PCRE2_SPTR)(text.p ? text.p : ""), text.n, 0,
-                     search ? 0 : PCRE2_ANCHORED, d->match, NULL);
+                     PCRE2_NO_UTF_CHECK | (search ? 0 : PCRE2_ANCHORED), d->match, NULL);
     if (rc >= 0)
         return 1;
     if (rc != PCRE2_ERROR_NOMATCH) {

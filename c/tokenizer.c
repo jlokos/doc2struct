@@ -1,20 +1,31 @@
 #include "doc2struct.h"
 #include <string.h>
 #include <ctype.h>
+#include "scan.h"
 
-static int space_at(Str s, size_t i, size_t *k) { return ds_space(ds_utf8(s.p + i, s.n - i, k)); }
+static int space_at(Str s, size_t i, size_t *k) {
+    unsigned char c = (unsigned char)s.p[i];
+    if (c < 128) {
+        *k = 1;
+        return c == ' ' || (c >= 9 && c <= 13) || (c >= 28 && c <= 31);
+    }
+    return ds_space(ds_utf8(s.p + i, s.n - i, k));
+}
 static Str intern_tag(Document *d, Str tag) {
-    Str lower = ds_lower(&d->arena, tag), *cached;
-    if (!lower.p)
-        return (Str){0};
-    cached = ds_map_get(&d->tags, lower);
+    Str lower, *cached;
+    if (ds_upper_or_nonascii(tag.p, tag.n) == tag.n)
+        return tag;
+    cached = ds_map_get(&d->tags, tag);
     if (cached)
         return *cached;
+    lower = ds_lower(&d->arena, tag);
+    if (!lower.p)
+        return (Str){0};
     cached = ds_alloc(&d->arena, sizeof(Str));
     if (!cached)
         return (Str){0};
     *cached = lower;
-    if (!ds_map_put(&d->arena, &d->tags, lower, cached))
+    if (!ds_map_put(&d->arena, &d->tags, tag, cached))
         return (Str){0};
     return lower;
 }
@@ -27,13 +38,80 @@ int ds_void(Str t) {
             return 1;
     return 0;
 }
-static int wanted(Str s) {
-    static const char *names[] = {"style", "colspan", "rowspan", "href", "src", "alt", "hidden"};
+static int ascii_equal(Str s, const char *name) {
     size_t i;
-    for (i = 0; i < A_COUNT; i++)
-        if (ds_is(s, names[i]))
-            return (int)i;
+    for (i = 0; i < s.n; i++)
+        if (((unsigned char)s.p[i] | 32) != (unsigned char)name[i])
+            return 0;
+    return 1;
+}
+static int wanted(Str s) {
+    switch (s.n) {
+    case 3:
+        if (ascii_equal(s, "src"))
+            return A_SRC;
+        if (ascii_equal(s, "alt"))
+            return A_ALT;
+        break;
+    case 4:
+        if (ascii_equal(s, "href"))
+            return A_HREF;
+        break;
+    case 5:
+        if (ascii_equal(s, "style"))
+            return A_STYLE;
+        break;
+    case 6:
+        if (ascii_equal(s, "hidden"))
+            return A_HIDDEN;
+        break;
+    case 7:
+        if (ascii_equal(s, "colspan"))
+            return A_COLSPAN;
+        if (ascii_equal(s, "rowspan"))
+            return A_ROWSPAN;
+        break;
+    }
     return -1;
+}
+Token *ds_new_token(Document *d) {
+    TokenBuffer *buffer = &d->tokens;
+    if (!buffer->last || buffer->last->used == DS_TOKEN_CHUNK_SIZE) {
+        TokenChunk *chunk = ds_alloc_uninit(&d->arena, sizeof(TokenChunk));
+        if (!chunk)
+            return NULL;
+        chunk->next = NULL;
+        chunk->used = 0;
+        if (buffer->last)
+            buffer->last->next = chunk;
+        else
+            buffer->first = chunk;
+        buffer->last = chunk;
+    }
+    buffer->n++;
+    return buffer->last->data + buffer->last->used++;
+}
+
+int ds_store_token(Document *d, int kind, Str value, const Attrs *attrs) {
+    Token *token = ds_new_token(d);
+    size_t i;
+    if (!token)
+        return 0;
+    token->kind = kind;
+    token->value = value;
+    token->attrs = NULL;
+    if (attrs) {
+        for (i = 0; i < A_COUNT; i++)
+            if (attrs->value[i].p)
+                break;
+        if (i < A_COUNT) {
+            token->attrs = ds_alloc_uninit(&d->arena, sizeof(Attrs));
+            if (!token->attrs)
+                return 0;
+            *token->attrs = *attrs;
+        }
+    }
+    return 1;
 }
 static int attrs(Document *d, Str rest, Attrs *out) {
     size_t i = 0, k, start, end;
@@ -56,7 +134,7 @@ static int attrs(Document *d, Str rest, Attrs *out) {
         }
         if (i == start)
             break;
-        name = ds_lower(&d->arena, (Str){rest.p + start, i - start});
+        name = (Str){rest.p + start, i - start};
         index = wanted(name);
         while (i < rest.n && space_at(rest, i, &k))
             i += k;
@@ -69,8 +147,10 @@ static int attrs(Document *d, Str rest, Attrs *out) {
             if (i < rest.n && (rest.p[i] == '\'' || rest.p[i] == '\"')) {
                 char quote = rest.p[i++];
                 start = i;
-                while (i < rest.n && rest.p[i] != quote)
-                    i++;
+                {
+                    const char *close = memchr(rest.p + i, quote, rest.n - i);
+                    i = close ? (size_t)(close - rest.p) : rest.n;
+                }
                 end = i;
                 if (i < rest.n)
                     i++;
@@ -90,24 +170,170 @@ static int attrs(Document *d, Str rest, Attrs *out) {
     }
     return 1;
 }
-int ds_tokenize(Document *d, Str html, TokenSink sink, void *ctx) {
-    size_t i = 0, pos = 0, n = html.n;
-    while (i < n) {
-        size_t start = i, j, k, name_start, name_end, rest_start, end;
-        int closing = 0, selfclosed = 0;
-        Str tag;
-        Attrs at;
-        if (html.p[i] != '<') {
+
+/* Parse normal start tags once. Unusual quote placement uses the general path
+ * below so malformed input keeps the same tokenization behavior. Attribute
+ * values remain input slices unless entity expansion requires a new buffer. */
+static int start_attrs(Document *d, Str html, size_t i, size_t *end, Attrs *out) {
+    size_t k, start, name_end, q;
+    unsigned decode = 0;
+    memset(out, 0, sizeof(*out));
+    while (i < html.n) {
+        unsigned char c = (unsigned char)html.p[i];
+        Str value = {"", 0};
+        int index, has_entity = 0;
+        if (c == '>') {
+            *end = i;
+            for (q = 0; q < A_COUNT; q++)
+                if (decode & (1u << q))
+                    out->value[q] = ds_unescape(&d->arena, out->value[q]);
+            return d->arena.error[0] ? -2 : 1;
+        }
+        if (space_at(html, i, &k)) {
+            i += k;
+            continue;
+        }
+        if (c == '/') {
             i++;
             continue;
+        }
+        if (c == '=' || c == '"' || c == '\'' || !c)
+            return -1;
+        /* Inline styles dominate filing markup. Recognize this common spelling
+         * without a character-at-a-time name scan; value handling is shared. */
+        if (html.n - i >= 6 && !memcmp(html.p + i, "style=", 6)) {
+            index = A_STYLE;
+            i += 6;
+            goto read_value;
+        }
+        start = i;
+        while (i < html.n) {
+            c = (unsigned char)html.p[i];
+            if (space_at(html, i, &k) || c == '=' || c == '/' || c == '>' || c == '"' ||
+                c == '\'' || !c)
+                break;
+            i += k;
+        }
+        name_end = i;
+        index = wanted((Str){html.p + start, name_end - start});
+        while (i < html.n && space_at(html, i, &k))
+            i += k;
+        if (i < html.n && html.p[i] == '=') {
+            i++;
+        read_value:
+            while (i < html.n && space_at(html, i, &k))
+                i += k;
+            start = i;
+            if (i < html.n && (html.p[i] == '"' || html.p[i] == '\'')) {
+                const char *close;
+                char quote = html.p[i++];
+                start = i;
+                if (index >= 0) {
+                    i += ds_quote_or_amp(html.p + i, html.n - i, quote);
+                    if (i == html.n)
+                        return 0;
+                    has_entity = html.p[i] == '&';
+                }
+                close =
+                    has_entity || index < 0 ? memchr(html.p + i, quote, html.n - i) : html.p + i;
+                if (!close)
+                    return 0;
+                i = (size_t)(close - html.p);
+                value = (Str){html.p + start, i - start};
+                i++;
+            } else {
+                while (i < html.n && html.p[i] != '>' && !space_at(html, i, &k)) {
+                    if (html.p[i] == '"' || html.p[i] == '\'')
+                        return -1;
+                    has_entity |= html.p[i] == '&';
+                    i += k;
+                }
+                value = (Str){html.p + start, i - start};
+            }
+        }
+        if (index >= 0) {
+            out->value[index] = value;
+            decode = (decode & ~(1u << index)) | (has_entity ? 1u << index : 0);
+        }
+    }
+    return 0;
+}
+
+/* The parsing path can reject suppressed text before entity expansion. The
+ * standalone token API continues to expose every token and decoded entity. */
+static int send_text(Document *d, TokenSink sink, void *ctx, Str text) {
+    if (d->flow) {
+        if (d->skip_text)
+            return 1;
+        if (d->skip_blank) {
+            if (ds_blank_text(text.p, text.n))
+                return 1;
+            if (text.n == 6 && !memcmp(text.p, "&#160;", 6))
+                return 1;
+        }
+    }
+    return sink(ctx, TEXT, ds_unescape(&d->arena, text), NULL);
+}
+
+enum { TEMPLATE_SLOTS = 1024, TEMPLATE_PREFIX = 512, TEMPLATE_MAX = 4096 };
+typedef struct {
+    Str raw, tag;
+    Attrs attrs;
+    int selfclosed;
+} TagTemplate;
+
+static size_t template_index(const char *text) {
+    uint64_t first = 0, middle = 0, last = 0, hash;
+    size_t n = TEMPLATE_PREFIX;
+    const char *end = memchr(text, '>', n);
+    /* This is only a fingerprint. A '>' inside a quoted value is harmless:
+     * every hit must still match the complete original tag, including quotes. */
+    if (end)
+        n = (size_t)(end - text) + 1;
+    /* Sample bounded words rather than hashing every byte on every cache hit.
+     * Differences outside these words can collide; full equality below is
+     * still required before a template is reused. */
+    if (n >= 8) {
+        memcpy(&first, text, 8);
+        memcpy(&last, text + n - 8, 8);
+        memcpy(&middle, text + (n - 8) / 2, 8);
+    } else {
+        size_t i;
+        for (i = 0; i < n; i++)
+            first |= (uint64_t)(unsigned char)text[i] << (8 * i);
+    }
+    hash = (first ^ n) * 0x9e3779b185ebca87ULL;
+    hash = (hash ^ last) * 0xc2b2ae3d27d4eb4fULL;
+    hash = (hash ^ middle) * 0x9e3779b185ebca87ULL;
+    hash ^= hash >> 32;
+    return (size_t)hash & (TEMPLATE_SLOTS - 1);
+}
+
+int ds_tokenize(Document *d, Str html, TokenSink sink, void *ctx) {
+    size_t i = 0, pos = 0, n = html.n;
+    TagTemplate *templates =
+        d->flow && n >= 65536 ? ds_alloc(&d->arena, TEMPLATE_SLOTS * sizeof(TagTemplate)) : NULL;
+    if (d->arena.error[0])
+        return 0;
+    while (i < n) {
+        size_t start = i, j, k, name_start, name_end, rest_start, end;
+        int closing = 0, selfclosed = 0, parsed_attrs = 0;
+        Str tag;
+        Attrs at;
+        const Attrs *dispatch_attrs = &at;
+        TagTemplate *cached = NULL;
+        if (html.p[i] != '<') {
+            const char *next = memchr(html.p + i, '<', n - i);
+            if (!next)
+                break;
+            i = start = (size_t)(next - html.p);
         }
         if (i + 4 <= n && !memcmp(html.p + i, "<!--", 4)) {
             j = i + 4;
             while (j + 3 <= n && memcmp(html.p + j, "-->", 3))
                 j++;
             end = j + 3 <= n ? j + 3 : n;
-            if (start > pos &&
-                !sink(ctx, TEXT, ds_unescape(&d->arena, (Str){html.p + pos, start - pos}), NULL))
+            if (start > pos && !send_text(d, sink, ctx, (Str){html.p + pos, start - pos}))
                 return 0;
             pos = i = end;
             continue;
@@ -117,8 +343,7 @@ int ds_tokenize(Document *d, Str html, TokenSink sink, void *ctx) {
             while (j < n && html.p[j] != '>')
                 j++;
             end = j < n ? j + 1 : n;
-            if (start > pos &&
-                !sink(ctx, TEXT, ds_unescape(&d->arena, (Str){html.p + pos, start - pos}), NULL))
+            if (start > pos && !send_text(d, sink, ctx, (Str){html.p + pos, start - pos}))
                 return 0;
             pos = i = end;
             continue;
@@ -133,18 +358,63 @@ int ds_tokenize(Document *d, Str html, TokenSink sink, void *ctx) {
             i++;
             continue;
         }
-        name_start = j++;
+        /* Ordinary lowercase end tags have no attributes or quoted content.
+         * Keep the general path for every other spelling and malformed form. */
+        if (closing) {
+            size_t q = j;
+            while (q < n && html.p[q] >= 'a' && html.p[q] <= 'z')
+                q++;
+            if (q < n && html.p[q] == '>') {
+                if (start > pos && !send_text(d, sink, ctx, (Str){html.p + pos, start - pos}))
+                    return 0;
+                if (!sink(ctx, END, (Str){html.p + j, q - j}, NULL))
+                    return 0;
+                pos = i = q + 1;
+                continue;
+            }
+        }
+        name_start = j;
+        if (!closing && templates && n - j >= TEMPLATE_PREFIX) {
+            cached = templates + template_index(html.p + j);
+            if (cached->raw.p && cached->raw.n <= n - j &&
+                !memcmp(html.p + j, cached->raw.p, cached->raw.n)) {
+                tag = cached->tag;
+                dispatch_attrs = &cached->attrs;
+                selfclosed = cached->selfclosed;
+                end = j + cached->raw.n;
+                if (start > pos && !send_text(d, sink, ctx, (Str){html.p + pos, start - pos}))
+                    return 0;
+                pos = end;
+                goto dispatch_start;
+            }
+        }
+        j++;
         while (j < n && html.p[j] != '/' && html.p[j] != '>' && !space_at(html, j, &k))
             j += k;
         name_end = j;
         rest_start = j;
-        while (j < n) {
+        if (!closing) {
+            int status = start_attrs(d, html, j, &j, &at);
+            if (status == -2)
+                return 0;
+            if (!status) {
+                i++;
+                continue;
+            }
+            parsed_attrs = status == 1;
+        }
+        while (!parsed_attrs && j < n) {
+            j += ds_tag_mark(html.p + j, n - j);
+            if (j == n)
+                break;
             char c = html.p[j];
             if (c == '\'' || c == '\"') {
                 char quote = c;
                 j++;
-                while (j < n && html.p[j] != quote)
-                    j++;
+                {
+                    const char *close = memchr(html.p + j, quote, n - j);
+                    j = close ? (size_t)(close - html.p) : n;
+                }
                 if (j < n)
                     j++;
                 else
@@ -159,8 +429,7 @@ int ds_tokenize(Document *d, Str html, TokenSink sink, void *ctx) {
             continue;
         }
         end = j + 1;
-        if (start > pos &&
-            !sink(ctx, TEXT, ds_unescape(&d->arena, (Str){html.p + pos, start - pos}), NULL))
+        if (start > pos && !send_text(d, sink, ctx, (Str){html.p + pos, start - pos}))
             return 0;
         tag = intern_tag(d, (Str){html.p + name_start, name_end - name_start});
         if (!tag.p)
@@ -173,12 +442,37 @@ int ds_tokenize(Document *d, Str html, TokenSink sink, void *ctx) {
             continue;
         }
         {
-            Str rest = {html.p + rest_start, j - rest_start}, trim = ds_strip(rest, 0);
-            selfclosed = trim.n && trim.p[trim.n - 1] == '/';
-            if (!attrs(d, rest, &at))
+            Str rest = {html.p + rest_start, j - rest_start};
+            size_t tail = j;
+            while (tail > rest_start) {
+                unsigned char c = (unsigned char)html.p[tail - 1];
+                if (c >= 128) {
+                    Str trim = ds_strip(rest, 0);
+                    selfclosed = trim.n && trim.p[trim.n - 1] == '/';
+                    break;
+                }
+                if (!(c == ' ' || (c >= 9 && c <= 13) || (c >= 28 && c <= 31))) {
+                    selfclosed = c == '/';
+                    break;
+                }
+                tail--;
+            }
+            if (!parsed_attrs && !attrs(d, rest, &at))
                 return 0;
         }
-        if (!sink(ctx, START, tag, &at))
+        if (cached && end - name_start <= TEMPLATE_MAX) {
+            if (at.value[A_STYLE].n) {
+                at.prepared_style = ds_style(d, at.value[A_STYLE]);
+                if (!at.prepared_style)
+                    return 0;
+            }
+            cached->raw = (Str){html.p + name_start, end - name_start};
+            cached->tag = tag;
+            cached->attrs = at;
+            cached->selfclosed = selfclosed;
+        }
+    dispatch_start:
+        if (!sink(ctx, START, tag, dispatch_attrs))
             return 0;
         if (!selfclosed && (ds_is(tag, "script") || ds_is(tag, "style") || ds_is(tag, "title"))) {
             size_t q = end;
@@ -212,7 +506,7 @@ int ds_tokenize(Document *d, Str html, TokenSink sink, void *ctx) {
         }
         i = pos;
     }
-    if (pos < n && !sink(ctx, TEXT, ds_unescape(&d->arena, (Str){html.p + pos, n - pos}), NULL))
+    if (pos < n && !send_text(d, sink, ctx, (Str){html.p + pos, n - pos}))
         return 0;
     return !d->arena.error[0];
 }

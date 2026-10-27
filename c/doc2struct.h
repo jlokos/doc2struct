@@ -10,8 +10,20 @@ typedef struct {
     size_t n;
 } Str;
 typedef struct Block Block;
+/* Single-owner optional block cache. Retire attached arenas before the pool. */
 typedef struct {
     Block *blocks;
+    size_t bytes, limit;
+} ArenaPool;
+
+typedef struct {
+    ArenaPool pool;
+} ParserContext;
+
+#define DS_DEFAULT_CACHE_SIZE ((size_t)8 * 1024 * 1024)
+typedef struct {
+    Block *blocks;
+    ArenaPool *pool;
     char error[256];
 } Arena;
 typedef struct {
@@ -30,11 +42,12 @@ typedef struct {
 typedef struct {
     unsigned flags;
     double font, indent;
-    int has_font, display_none, vis_hidden;
+    int has_font, has_indent, display_none, vis_hidden;
 } Style;
 enum { A_STYLE, A_COLSPAN, A_ROWSPAN, A_HREF, A_SRC, A_ALT, A_HIDDEN, A_COUNT };
 typedef struct {
     Str value[A_COUNT];
+    Style *prepared_style;
 } Attrs;
 enum { TEXT, START, END };
 enum {
@@ -56,8 +69,20 @@ typedef struct {
 typedef struct {
     int kind;
     Str value;
-    Attrs attrs;
+    Attrs *attrs;
 } Token;
+
+#define DS_TOKEN_CHUNK_SIZE 4096
+typedef struct TokenChunk {
+    struct TokenChunk *next;
+    size_t used;
+    Token data[DS_TOKEN_CHUNK_SIZE];
+} TokenChunk;
+
+typedef struct {
+    TokenChunk *first, *last;
+    size_t n;
+} TokenBuffer;
 typedef struct {
     int hide_hidden_attr, hide_visibility;
     size_t max_span;
@@ -65,6 +90,7 @@ typedef struct {
 typedef struct Regex {
     pcre2_code *code;
     unsigned groups;
+    unsigned first_ascii, first_digit, caseless;
     struct Regex *next;
 } Regex;
 typedef struct {
@@ -131,7 +157,10 @@ typedef struct {
 } Row;
 typedef struct {
     Arena arena;
-    Vec runs, tokens, rows;
+    Vec runs, rows, lines;
+    void *flow;
+    int skip_text, skip_blank;
+    TokenBuffer tokens;
     Map styles, tags;
     pcre2_match_data *match;
     size_t match_pairs;
@@ -142,7 +171,9 @@ Str ds_str(const char *s);
 int ds_eq(Str a, Str b);
 int ds_is(Str a, const char *s);
 void *ds_alloc(Arena *, size_t);
+void *ds_alloc_uninit(Arena *, size_t);
 void ds_arena_free(Arena *);
+void ds_pool_clear(ArenaPool *);
 void *ds_push(Arena *, Vec *, size_t);
 void *ds_map_get(Map *, Str);
 int ds_map_put(Arena *, Map *, Str, void *);
@@ -158,11 +189,24 @@ uint32_t ds_utf8(const char *, size_t, size_t *);
 Str ds_input(Arena *, Str);
 Str ds_unescape(Arena *, Str);
 int ds_tokenize(Document *, Str, TokenSink, void *);
+int ds_store_token(Document *, int, Str, const Attrs *);
+Token *ds_new_token(Document *);
 int ds_void(Str);
+Style *ds_style(Document *, Str);
 void *ds_normalizer(Document *, Options);
 int ds_normalize_token(void *, int, Str, const Attrs *);
 int ds_normalize_finish(void *);
 int ds_standardize(Document *, const Rules *);
+int ds_parse(Document *, Str, const Rules *, Options);
+/* Contexts have one owner and no worker threads. Initialize once; free each
+ * document before destroying its context. Clear releases only cached blocks. */
+void ds_parser_init(ParserContext *, size_t);
+int ds_parser_parse(ParserContext *, Document *, Str, const Rules *, Options);
+void ds_parser_clear(ParserContext *);
+int ds_flow_begin(Document *);
+int ds_flow_run(Document *, const Run *);
+int ds_flow_finish(Document *);
+Str ds_json(const Document *, int, Arena *);
 int ds_tables(Document *, const Rules *);
 Regex *ds_regex(Rules *, Str, int);
 int ds_match(Document *, Regex *, Str, int);

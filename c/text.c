@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include "unicode_data.h"
+#include "scan.h"
 
 uint32_t ds_utf8(const char *p, size_t n, size_t *step) {
     const unsigned char *s = (const unsigned char *)p;
@@ -90,6 +91,16 @@ Str ds_strip(Str s, int custom) {
     size_t i = 0, j = 0, k;
     uint32_t c;
     while (i < s.n) {
+        unsigned char byte = (unsigned char)s.p[i];
+        if (byte < 128) {
+            int space =
+                custom ? (byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r')
+                       : (byte == ' ' || (byte >= 9 && byte <= 13) || (byte >= 28 && byte <= 31));
+            if (!space)
+                break;
+            i++;
+            continue;
+        }
         c = ds_utf8(s.p + i, s.n - i, &k);
         if (!(custom ? empty_char(c) : ds_space(c)))
             break;
@@ -97,6 +108,16 @@ Str ds_strip(Str s, int custom) {
     }
     j = s.n;
     while (j > i) {
+        unsigned char byte = (unsigned char)s.p[j - 1];
+        if (byte < 128) {
+            int space =
+                custom ? (byte == ' ' || byte == '\t' || byte == '\n' || byte == '\r')
+                       : (byte == ' ' || (byte >= 9 && byte <= 13) || (byte >= 28 && byte <= 31));
+            if (!space)
+                break;
+            j--;
+            continue;
+        }
         size_t start = j - 1;
         while (start > i && ((unsigned char)s.p[start] & 0xc0) == 0x80)
             start--;
@@ -116,6 +137,9 @@ Str ds_input(Arena *a, Str s) {
         0x2039, 0x152,  0xfffd, 0x17d,  0xfffd, 0xfffd, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
         0x2013, 0x2014, 0x2dc,  0x2122, 0x161,  0x203a, 0x153,  0xfffd, 0x17e,  0x178};
     while (i < s.n) {
+        i += ds_nonascii(s.p + i, s.n - i);
+        if (i == s.n)
+            return s;
         cp = ds_utf8(s.p + i, s.n - i, &k);
         if (cp == 0xfffd && k == 1)
             break;
@@ -127,7 +151,7 @@ Str ds_input(Arena *a, Str s) {
         snprintf(a->error, sizeof(a->error), "input too large");
         return (Str){0};
     }
-    p = ds_alloc(a, s.n * 3 + 1);
+    p = ds_alloc_uninit(a, s.n * 3 + 1);
     if (!p)
         return (Str){0};
     for (i = 0, j = 0; i < s.n; i++) {
@@ -136,6 +160,7 @@ Str ds_input(Arena *a, Str s) {
             cp = cp1252[cp - 128];
         j += encode(p + j, cp);
     }
+    p[j] = 0;
     return (Str){p, j};
 }
 int ds_upper(Str s) {
@@ -151,17 +176,37 @@ int ds_upper(Str s) {
     return found;
 }
 Str ds_lower(Arena *a, Str s) {
-    size_t i, k, j = 0;
+    size_t i, k, j = 0, first;
     char *p;
     int preceding = 0, changed = 0;
+    first = ds_upper_or_nonascii(s.p, s.n);
+    if (first == s.n)
+        return s;
     if (s.n > (SIZE_MAX - 1) / 3) {
         snprintf(a->error, sizeof(a->error), "text too large");
         return (Str){0};
     }
-    p = ds_alloc(a, s.n * 3 + 1);
+    if (ds_nonascii(s.p + first, s.n - first) == s.n - first) {
+        p = ds_alloc_uninit(a, s.n + 1);
+        if (!p)
+            return (Str){0};
+        ds_ascii_lower(p, s.p, s.n);
+        p[s.n] = 0;
+        return (Str){p, s.n};
+    }
+    p = ds_alloc_uninit(a, s.n * 3 + 1);
     if (!p)
         return (Str){0};
     for (i = 0; i < s.n; i += k) {
+        if ((unsigned char)s.p[i] < 128) {
+            size_t run = ds_nonascii(s.p + i, s.n - i);
+            unsigned char last = (unsigned char)s.p[i + run - 1];
+            changed |= ds_ascii_lower(p + j, s.p + i, run);
+            preceding = (last >= 'A' && last <= 'Z') || (last >= 'a' && last <= 'z');
+            j += run;
+            k = run;
+            continue;
+        }
         uint32_t cp = ds_utf8(s.p + i, s.n - i, &k);
         const UnicodeEntry *e = cp >= 128 ? entry(cp) : NULL;
         unsigned f = uflags(cp);
@@ -196,6 +241,7 @@ Str ds_lower(Arena *a, Str s) {
         if (!(f & 8))
             preceding = (f & 6) != 0;
     }
+    p[j] = 0;
     return changed ? (Str){p, j} : s;
 }
 int ds_proper(Str s) {
@@ -238,37 +284,65 @@ int ds_proper(Str s) {
     }
     return words > 0;
 }
-static const Entity *entity(Str key) {
-    size_t l = 0, r = sizeof(entities) / sizeof(*entities);
-    while (l < r) {
-        size_t m = l + (r - l) / 2, n = key.n < entities[m].length ? key.n : entities[m].length;
-        int c = memcmp(key.p, entities[m].name, n);
-        if (!c)
-            c = key.n < entities[m].length ? -1 : key.n > entities[m].length ? 1 : 0;
-        if (c > 0)
-            l = m + 1;
-        else if (c < 0)
-            r = m;
-        else
-            return entities + m;
+static const Entity *longest_entity(const char *p, size_t n, size_t *used) {
+    size_t i = 1, node;
+    int found = -1;
+    unsigned char byte;
+    if (!n || (byte = (unsigned char)p[0]) >= 128 || !entity_root[byte])
+        return NULL;
+    node = entity_root[byte] - 1;
+    for (;;) {
+        const EntityNode *current = entity_nodes + node;
+        size_t j;
+        if (current->value >= 0) {
+            found = current->value;
+            *used = i;
+        }
+        if (!current->count || i == n || i == DS_ENTITY_MAX_NAME)
+            break;
+        byte = (unsigned char)p[i];
+        for (j = 0; j < current->count; j++)
+            if (entity_edges[current->first + j].byte == byte)
+                break;
+        if (j == current->count)
+            break;
+        node = entity_edges[current->first + j].target;
+        i++;
     }
-    return NULL;
+    return found >= 0 ? entities + found : NULL;
 }
 Str ds_unescape(Arena *a, Str s) {
     char *out;
-    size_t i = 0, j = 0;
-    if (!memchr(s.p, '&', s.n))
+    const char *first;
+    size_t i, j, capacity;
+    /* No HTML character reference can fit in fewer than three bytes. */
+    if (s.n < 3)
         return s;
-    if (s.n > (SIZE_MAX - 1) / 3) {
+    first = memchr(s.p, '&', s.n);
+    if (!first)
+        return s;
+    /* Numeric references never grow. The generated ratio also bounds every
+     * named entity, including the rare expansions such as &nGt;. */
+    if (s.n > (SIZE_MAX - DS_ENTITY_EXPANSION_DENOMINATOR) / DS_ENTITY_EXPANSION_NUMERATOR) {
         snprintf(a->error, sizeof(a->error), "text too large");
         return (Str){0};
     }
-    out = ds_alloc(a, s.n * 3 + 1);
+    capacity = (s.n * DS_ENTITY_EXPANSION_NUMERATOR + DS_ENTITY_EXPANSION_DENOMINATOR - 1) /
+                   DS_ENTITY_EXPANSION_DENOMINATOR +
+               1;
+    out = ds_alloc_uninit(a, capacity);
     if (!out)
         return (Str){0};
+    i = j = (size_t)(first - s.p);
+    if (i)
+        memcpy(out, s.p, i);
     while (i < s.n) {
         if (s.p[i] != '&') {
-            out[j++] = s.p[i++];
+            const char *next = memchr(s.p + i, '&', s.n - i);
+            size_t count = next ? (size_t)(next - s.p - i) : s.n - i;
+            memcpy(out + j, s.p + i, count);
+            i += count;
+            j += count;
             continue;
         }
         if (i + 2 < s.n && s.p[i + 1] == '#') {
@@ -326,21 +400,10 @@ Str ds_unescape(Arena *a, Str s) {
             }
         }
         {
-            size_t q = i + 1, limit;
-            const Entity *e = NULL;
-            while (q < s.n && q - i <= 32 && !strchr("\t\n\f <&#;", s.p[q]) && s.p[q] != 0)
-                q++;
-            if (q < s.n && s.p[q] == ';')
-                q++;
-            limit = q - i - 1;
-            while (limit) {
-                e = entity((Str){s.p + i + 1, limit});
-                if (e)
-                    break;
-                limit--;
-            }
+            size_t limit = 0;
+            const Entity *e = longest_entity(s.p + i + 1, s.n - i - 1, &limit);
             if (e) {
-                size_t n = strlen(e->value);
+                size_t n = e->value_length;
                 memcpy(out + j, e->value, n);
                 j += n;
                 i += limit + 1;
@@ -349,5 +412,6 @@ Str ds_unescape(Arena *a, Str s) {
         }
         out[j++] = s.p[i++];
     }
+    out[j] = 0;
     return (Str){out, j};
 }
