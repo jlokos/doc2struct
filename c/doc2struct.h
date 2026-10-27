@@ -153,11 +153,26 @@ typedef struct ListLines {
 typedef struct {
     Str id, text;
 } Note;
+
+enum {
+    DS_TRIMMED_CELLS = 1u << 0,
+    DS_MERGED_FORMATTING = 1u << 1,
+    DS_MERGED_RANGES = 1u << 2,
+    DS_EMPTY_ROWS = 1u << 3,
+    DS_EMPTY_COLUMNS = 1u << 4,
+    DS_SPAN_ROWS = 1u << 5,
+    DS_SPAN_COLUMNS = 1u << 6,
+    DS_MERGED_HEADERS = 1u << 7,
+    DS_TABLE_FORMATTING = 1u << 8,
+    DS_TABLE_ALIGNMENT = 1u << 9,
+    DS_TABLE_ATTACHMENT = 1u << 10
+};
+extern const char *ds_cleanup_names[];
 typedef struct {
     size_t id, level;
     Str type, klass, title, text, preamble, postamble;
     Matrix matrix;
-    int cleaned, removed;
+    int cleaned, removed; /* cleaned: -1 outside tables, otherwise cleanup-info bits */
     Item *items;
     size_t nitems;
     Note *notes;

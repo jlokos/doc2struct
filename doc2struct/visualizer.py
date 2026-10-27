@@ -39,6 +39,9 @@ td.empty{background:#fafafa}
 .tbl-foot{font-size:12px;color:#444;margin:6px 0 0}
 .tbl-foot b{margin-right:4px}
 .tbl-post{font-size:12px;color:#555;margin:6px 0 0}
+.tbl-cleanup{background:#F5F5F5;color:#555;padding:6px 8px;margin:6px 0;font-size:12px}
+.tbl-cleanup.review{background:#FFF3E0;color:#8D4B00;border-left:3px solid #FF9800}
+.tbl-cleanup ul{margin:4px 0;padding-left:20px}
 .tag{font-family:monospace;font-size:10px;background:#fff;border:1px solid #bbb;border-radius:3px;padding:0 4px;margin-right:6px;color:#666;font-weight:normal;font-style:normal}
 </style></head><body>"""
 
@@ -141,12 +144,21 @@ def visualize_instructions(rows, filename='instructions_visualization.html', ope
 
 def _st_table(r):
     """A table with its title, preamble, footnotes and postamble, in document order."""
-    cls = 'dirty' if r.get('cleaned') is False else 'cleaned'
+    info = r.get('cleaned')
+    issues = [s for s in info if s.startswith('unresolved_') or s == 'ambiguous_text_attachment'] if isinstance(info, list) else []
+    cls = 'dirty' if info is False or issues else 'cleaned'
     out = [f"<div class='table-wrapper' style='margin-left:{r['level'] * 24}px'><div class='tbl'>"]
     if r.get('text'):
         out.append(f"<div class='tbl-title'><span class='tag'>title</span>{escape(r['text'])}</div>")
     if r.get('preamble'):
         out.append(f"<div class='tbl-pre'><span class='tag'>preamble</span>{escape(r['preamble'])}</div>")
+    if isinstance(info, list):
+        state = ' review' if issues else ''
+        summary = f"cleanup: {len(info) - len(issues)} changes, {len(issues)} issues" if info else 'cleanup: no recorded changes or issues'
+        out.append(f"<details class='tbl-cleanup{state}'><summary>{summary}</summary><ul>")
+        for entry in info:
+            out.append(f"<li>{escape(entry.replace('_', ' '))}</li>")
+        out.append('</ul></details>')
     out.append(f"<div class='table-container {cls}'><table>")
     for row in r['matrix']:
         out.append('<tr>' + ''.join(f'<td>{escape(c)}</td>' for c in row) + '</tr>')

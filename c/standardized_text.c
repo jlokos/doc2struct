@@ -454,7 +454,109 @@ static unsigned attrs(Item *i) {
         flags |= FAKE_TABLE;
     return flags;
 }
-static int split(Document *d, Vec *lines) {
+static Str line_text(Document *, Item *, size_t);
+/* Reuse the regex compiler's conservative mandatory-first-atom guard before
+ * allocating normalized copies of ordinary body paragraphs. */
+static int header_candidate(const Rules *r, Line *line) {
+    size_t i, j;
+    Str first = {0};
+    unsigned char c;
+    for (i = 0; i < line->nitems; i++) {
+        if (image(line->items + i))
+            continue;
+        first = ds_strip(line->items[i].run.text, 0);
+        if (first.n)
+            break;
+    }
+    if (!first.n)
+        return 0;
+    c = (unsigned char)first.p[0];
+    if (c >= 128)
+        return r->nheaders != 0;
+    /* Header rules always receive lowercased logical text. */
+    if (c >= 'A' && c <= 'Z')
+        c |= 32;
+    for (j = 0; j < r->nheaders; j++) {
+        Regex *rx = r->headers[j].rx;
+        if (rx->first_digit && (c < '0' || c > '9'))
+            continue;
+        if (rx->first_ascii) {
+            unsigned char expected = (unsigned char)(rx->first_ascii - 1);
+            if (rx->caseless) {
+                if (expected >= 'A' && expected <= 'Z')
+                    expected |= 32;
+                if (c >= 'A' && c <= 'Z')
+                    c |= 32;
+            }
+            if (c != expected)
+                continue;
+        }
+        return 1;
+    }
+    return 0;
+}
+/* Rules see the complete logical line, with HTML whitespace normalized.
+ * Display text retains its original whitespace and capitalization. */
+static Str rule_text(Document *d, Line *line) {
+    Str source = ds_lower(&d->arena, line_text(d, line->items, line->nitems));
+    char *buffer;
+    size_t i, k, used = 0;
+    int space = 0;
+    if (!source.p)
+        return source;
+    buffer = ds_alloc_uninit(&d->arena, source.n + 1);
+    if (!buffer)
+        return (Str){0};
+    for (i = 0; i < source.n; i += k) {
+        uint32_t c = ds_utf8(source.p + i, source.n - i, &k);
+        if (ds_space(c) || c == 0x200b) {
+            space = used != 0;
+            continue;
+        }
+        if (space)
+            buffer[used++] = ' ';
+        memcpy(buffer + used, source.p + i, k);
+        used += k;
+        space = 0;
+    }
+    buffer[used] = 0;
+    return (Str){buffer, used};
+}
+static int header_match(Document *d, const Rules *r, Line *line, Str text) {
+    size_t j;
+    unsigned flags = line->nitems ? attrs(line->items) : 0;
+    for (j = 0; j < r->nheaders; j++)
+        if ((r->headers[j].requires & flags) == r->headers[j].requires &&
+            ds_match(d, r->headers[j].rx, text, 0))
+            return (int)j;
+    return -1;
+}
+static int item_label(Str text) {
+    size_t i = 4, count = 0;
+    if (text.n < 5 || memcmp(text.p, "item", 4))
+        return 0;
+    while (i < text.n) {
+        size_t start;
+        while (i < text.n && (text.p[i] == ' ' || text.p[i] == ','))
+            i++;
+        start = i;
+        while (i < text.n && text.p[i] >= '0' && text.p[i] <= '9')
+            i++;
+        if (start == i || i - start > 3)
+            return 0;
+        if (i < text.n && text.p[i] == '.')
+            i++;
+        if (i < text.n && text.p[i] >= 'a' && text.p[i] <= 'z')
+            i++;
+        if (i < text.n && text.p[i] == '.')
+            i++;
+        if (i < text.n && text.p[i] != ' ' && text.p[i] != ',')
+            return 0;
+        count++;
+    }
+    return count != 0;
+}
+static int split(Document *d, const Rules *r, Vec *lines) {
     Vec out = {0};
     Line *all = lines->p;
     int dominant;
@@ -462,6 +564,12 @@ static int split(Document *d, Vec *lines) {
     size_t i;
     for (i = 0; i < lines->n; i++) {
         Line line = all[i];
+        if (!line.listitem && line.nitems && !image(line.items) && header_candidate(r, &line) &&
+            header_match(d, r, &line, rule_text(d, &line)) >= 0) {
+            if (!append_line(d, &out, line))
+                return 0;
+            continue;
+        }
         if (!line.listitem && line.nitems > 1 && !image(line.items) &&
             ((attrs(line.items) & ~FAKE_TABLE) ||
              (dominant && line.items[0].run.has_font && line.items[0].run.font > common * 1.2))) {
@@ -502,46 +610,102 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
         }
         if (first && !image(first)) {
             int big = dominant && first->run.has_font && first->run.font > 1.2 * common;
+            int matched;
+            Str text;
             ln->attrs = attrs(first);
-            if (dominant && first->run.has_font && first->run.font < common) {
+            matched = -1;
+            if (header_candidate(r, ln)) {
+                text = rule_text(d, ln);
+                matched = header_match(d, r, ln, text);
+            }
+            if (matched >= 0) {
+                Header *h = r->headers + matched;
+                Vec groups = {0};
+                unsigned g;
+                Str *p = ds_push(&d->arena, &groups, sizeof(Str));
+                if (!p)
+                    return 0;
+                *p = h->name;
+                for (g = 1; g <= h->rx->groups; g++) {
+                    Str part = ds_group(d, text, g);
+                    if (part.p) {
+                        p = ds_push(&d->arena, &groups, sizeof(Str));
+                        if (!p)
+                            return 0;
+                        *p = part;
+                    }
+                }
+                ln->title = ds_join(&d->arena, groups.p, groups.n, ds_str(""));
+                ln->level = h->level;
+                ln->klass = h->name;
+            } else if (dominant && first->run.has_font && first->run.font < common) {
                 ln->level = -2;
                 ln->klass = ds_str("textsmall");
                 ln->attrs = 0;
             } else if (big || (ln->attrs & ~FAKE_TABLE)) {
-                Str text = ds_strip(ds_lower(&d->arena, first->run.text), 0);
-                int matched = 0;
-                for (j = 0; j < r->nheaders; j++) {
-                    Header *h = r->headers + j;
-                    if (ds_match(d, h->rx, text, 0) && (h->requires & ln->attrs) == h->requires) {
-                        Vec groups = {0};
-                        unsigned g;
-                        Str *p = ds_push(&d->arena, &groups, sizeof(Str));
-                        if (!p)
-                            return 0;
-                        *p = h->name;
-                        for (g = 1; g <= h->rx->groups; g++) {
-                            Str part = ds_group(d, text, g);
-                            if (part.p) {
-                                p = ds_push(&d->arena, &groups, sizeof(Str));
-                                if (!p)
-                                    return 0;
-                                *p = part;
-                            }
-                        }
-                        ln->title = ds_join(&d->arena, groups.p, groups.n, ds_str(""));
-                        ln->level = h->level;
-                        ln->klass = h->name;
-                        matched = 1;
-                        break;
-                    }
-                }
-                if (!matched) {
-                    ln->level = predicted;
-                    ln->klass = ds_str("predicted header");
-                    ln->predicted = 1;
-                }
+                ln->level = predicted;
+                ln->klass = ds_str("predicted header");
+                ln->predicted = 1;
             }
         }
+    }
+    /* A continued explicit heading belongs to the active section. Suppress it
+     * before it can reset predicted-heading levels or the document stack. */
+    {
+        Vec active = {0};
+        size_t kept = 0;
+        for (i = 0; i < lines->n; i++) {
+            Line ln = all[i];
+            if (!ln.predicted && ln.level >= 0 && ln.title.n) {
+                Line *parents = active.p, *previous = NULL, *slot;
+                Str text = rule_text(d, &ln);
+                int continued = 0, bare = 1;
+                size_t q, used = 0;
+                for (q = 0; q + 9 <= text.n; q++)
+                    if ((!q || text.p[q - 1] < 'a' || text.p[q - 1] > 'z') &&
+                        !memcmp(text.p + q, "continued", 9) &&
+                        ds_strip((Str){text.p + q + 9, text.n - q - 9}, 0).n <= 2)
+                        continued = 1;
+                for (q = 0; q < text.n; q++)
+                    if (text.p[q] != ' ' && text.p[q] != '.') {
+                        if (used >= ln.title.n || text.p[q] != ln.title.p[used])
+                            bare = 0;
+                        used++;
+                    }
+                bare = bare && used == ln.title.n;
+                bare = bare || item_label(text);
+                if (bare && dominant && ln.items[0].run.has_font &&
+                    ln.items[0].run.font < common) {
+                    int upcoming = 0;
+                    for (q = i + 1; q < lines->n && q < i + 5; q++)
+                        if (!all[q].predicted && ds_eq(all[q].title, ln.title) &&
+                            ds_eq(all[q].klass, ln.klass)) {
+                            upcoming = 1;
+                            break;
+                        }
+                    if (upcoming)
+                        continue;
+                }
+                for (q = active.n; q; q--)
+                    if (parents[q - 1].level == ln.level) {
+                        previous = parents + q - 1;
+                        break;
+                    }
+                if (previous && ds_eq(previous->title, ln.title) &&
+                    ds_eq(previous->klass, ln.klass) &&
+                    (continued || (bare && dominant && ln.items[0].run.has_font &&
+                                   ln.items[0].run.font < common)))
+                    continue;
+                while (active.n && ((Line *)active.p)[active.n - 1].level >= ln.level)
+                    active.n--;
+                slot = ds_push(&d->arena, &active, sizeof(Line));
+                if (!slot)
+                    return 0;
+                *slot = ln;
+            }
+            all[kept++] = ln;
+        }
+        lines->n = kept;
     }
     for (i = 0; i < lines->n; i++) {
         Line *ln = all + i;
@@ -689,6 +853,6 @@ static int build(Document *d, Vec *lines) {
 int ds_standardize(Document *d, const Rules *r) {
     Vec lines = d->flow ? d->lines : (Vec){0};
     return (d->flow || group(d, &lines)) && ds_lists(d, &lines) &&
-           clean(d, r, &lines) && split(d, &lines) &&
+           clean(d, r, &lines) && split(d, r, &lines) &&
            classify(d, r, &lines) && build(d, &lines) && ds_list_blocks(d) && ds_tables(d, r);
 }

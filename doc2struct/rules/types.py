@@ -45,7 +45,7 @@ class RemoveRules:
 @dataclass(frozen=True)
 class HeaderRule:
     name: str                          # class, e.g. 'item'
-    regex: str                         # matched against the lowercased text of the line's first piece
+    regex: str                         # matched against the complete lowercased, whitespace-normalized line
     level: int                         # nesting level, 0 = outermost
     requires: Tuple[str, ...] = ()     # styles the first piece must have (see defaults.KNOWN_STYLES)
 

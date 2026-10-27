@@ -13,7 +13,7 @@ STANDARD_REMOVE = (
 DEFAULT_REPEAT_THRESHOLD = 20
 
 # table notes (doc2dict's values)
-DEFAULT_FOOTNOTE_REGEX = r'^(\*|\(.{1,2}\)|\d+|†+)'
+DEFAULT_FOOTNOTE_REGEX = r'^(\*+|\((?:[a-zA-Z]|\d{1,3}|[ivxlcdmIVXLCDM]{2,4})\)|\d{1,3}(?:[.)](?!\d)|(?=\s|$))|†+)'
 DEFAULT_FOOTNOTE_LINES = 3       # extra lines without a marker that continue a footnote
 DEFAULT_PREAMBLE_LINES = 7       # text lines directly before a table
 DEFAULT_POSTAMBLE_LINES = 7      # text lines directly after a table's footnotes

@@ -91,6 +91,17 @@ static int notes_value(Writer *writer,const Row *row) {
     }
     return literal(writer,"]");
 }
+static int cleanup_value(Writer *writer,const Row *row) {
+    size_t i;int comma=0;
+    if(row->cleaned<0)return literal(writer,"null");
+    if(!literal(writer,"["))return 0;
+    for(i=0;ds_cleanup_names[i];i++)
+        if(row->cleaned&(1u<<i)) {
+            if(comma++&&!literal(writer,","))return 0;
+            if(!string_value(writer,ds_str(ds_cleanup_names[i])))return 0;
+        }
+    return literal(writer,"]");
+}
 Str ds_json(const Document *document,int with_rules,Arena *arena) {
     Writer writer={0};size_t i;writer.arena=arena;
     if(!literal(&writer,"["))return(Str){0};
@@ -104,7 +115,7 @@ Str ds_json(const Document *document,int with_rules,Arena *arena) {
             !literal(&writer,",\"standardized_title\":")||!string_value(&writer,row->title)))return(Str){0};
         if(!literal(&writer,",\"text\":")||!string_value(&writer,row->text)||
            !literal(&writer,",\"matrix\":")||!matrix_value(&writer,&row->matrix)||
-           !literal(&writer,",\"cleaned\":")||!literal(&writer,row->cleaned<0?"null":row->cleaned?"true":"false")||
+           !literal(&writer,",\"cleaned\":")||!cleanup_value(&writer,row)||
            !literal(&writer,",\"preamble\":")||!string_value(&writer,row->preamble)||
            !literal(&writer,",\"footnotes\":")||!notes_value(&writer,row)||
            !literal(&writer,",\"postamble\":")||!string_value(&writer,row->postamble)||

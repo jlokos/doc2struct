@@ -716,6 +716,26 @@ static int set_key(PyObject *dict, PyObject *key, PyObject *value) {
     Py_DECREF(value);
     return result == 0;
 }
+static PyObject *cleanup_info(Row *row) {
+    PyObject *list;
+    size_t i;
+    if (row->cleaned < 0)
+        return Py_NewRef(Py_None);
+    list = PyList_New(0);
+    if (!list)
+        return NULL;
+    for (i = 0; ds_cleanup_names[i]; i++)
+        if (row->cleaned & (1u << i)) {
+            PyObject *name = PyUnicode_FromString(ds_cleanup_names[i]);
+            if (!name || PyList_Append(list, name) < 0) {
+                Py_XDECREF(name);
+                Py_DECREF(list);
+                return NULL;
+            }
+            Py_DECREF(name);
+        }
+    return list;
+}
 static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
     PyObject *list = PyList_New((Py_ssize_t)d->rows.n);
     static const char *names[] = {"id",       "level",  "type",    "class",    "standardized_title",
@@ -758,8 +778,7 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
               !set_key(out, keys[4], unicode(row->title)))) ||
             !set_key(out, keys[5], unicode(row->text)) ||
             !set_key(out, keys[6], row->matrix.nr ? matrix(&row->matrix) : Py_NewRef(Py_None)) ||
-            !set_key(out, keys[7],
-                     row->cleaned < 0 ? Py_NewRef(Py_None) : PyBool_FromLong(row->cleaned)) ||
+            !set_key(out, keys[7], cleanup_info(row)) ||
             !set_key(out, keys[8], unicode(row->preamble)) || !set_key(out, keys[9], notes(row)) ||
             !set_key(out, keys[10], unicode(row->postamble))) {
             Py_DECREF(type);
@@ -1007,7 +1026,7 @@ static PyObject *native_columns(PyObject *self, PyObject *capsule) {
         values[4] = native->with_rules ? unicode(r->title) : NULL;
         values[5] = unicode(r->text);
         values[6] = r->matrix.nr ? matrix(&r->matrix) : Py_NewRef(Py_None);
-        values[7] = r->cleaned < 0 ? Py_NewRef(Py_None) : PyBool_FromLong(r->cleaned);
+        values[7] = cleanup_info(r);
         values[8] = unicode(r->preamble);
         values[9] = notes(r);
         values[10] = unicode(r->postamble);
