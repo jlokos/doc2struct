@@ -187,6 +187,35 @@ static int table_line(Document *d, Run *runs, size_t n, Line *out) {
             break;
     if (i < ncells)
         qsort(cells, ncells, sizeof(Cell), compare_cell);
+    for (i = 0; i < ncells; i++)
+        if (ds_strip(cells[i].text, 1).n)
+            break;
+    if (i < ncells) {
+        size_t length;
+        Str text = ds_strip(cells[i].text, 1);
+        if (ds_list_marker(text, &length) && length == text.n) {
+            Item *items = ds_alloc(&d->arena, ncells * sizeof(Item));
+            if (!items)
+                return 0;
+            for (i = 0; i < ncells; i++) {
+                Cell *c = cells + i;
+                items[i].run = *c->first;
+                items[i].run.text = c->text;
+                items[i].run.flags = c->flags;
+                items[i].run.href = c->href ? c->href->href : (Str){0};
+                if (c->font) {
+                    items[i].run.font = c->font->font;
+                    items[i].run.has_font = 1;
+                }
+                if (c->indent) {
+                    items[i].run.indent = c->indent->indent;
+                    items[i].run.has_indent = 1;
+                }
+            }
+            if (!ds_list_table(d, out, items, ncells))
+                return 0;
+        }
+    }
     for (i = 0; i < ncells; i++) {
         Cell *c = cells + i;
         size_t y, x;
@@ -332,7 +361,7 @@ static int clean(Document *d, const Rules *r, Vec *lines) {
             Item *it = all[i].items + j;
             Str text = ds_lower(&d->arena, ds_strip(it->run.text, 1));
             size_t *count;
-            if (!text.n || image(it))
+            if (!text.n || image(it) || all[i].listitem)
                 continue;
             count = ds_map_get(&counts, text);
             if (!count) {
@@ -345,7 +374,7 @@ static int clean(Document *d, const Rules *r, Vec *lines) {
     for (i = 0; i < lines->n; i++) {
         Line line = all[i];
         size_t kept = 0;
-        if (line.matrix.nr) {
+        if (line.matrix.nr || line.listitem) {
             all[out++] = line;
             continue;
         }
@@ -433,8 +462,8 @@ static int split(Document *d, Vec *lines) {
     size_t i;
     for (i = 0; i < lines->n; i++) {
         Line line = all[i];
-        if (line.nitems > 1 && !image(line.items) &&
-            (attrs(line.items) ||
+        if (!line.listitem && line.nitems > 1 && !image(line.items) &&
+            ((attrs(line.items) & ~FAKE_TABLE) ||
              (dominant && line.items[0].run.has_font && line.items[0].run.font > common * 1.2))) {
             Line first = line;
             first.nitems = 1;
@@ -467,6 +496,10 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
         Item *first = ln->nitems ? ln->items : NULL;
         ln->level = -1;
         ln->klass = ds_str("text");
+        if (ln->listitem) {
+            ln->klass = ds_str("listitem");
+            continue;
+        }
         if (first && !image(first)) {
             int big = dominant && first->run.has_font && first->run.font > 1.2 * common;
             ln->attrs = attrs(first);
@@ -474,7 +507,7 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
                 ln->level = -2;
                 ln->klass = ds_str("textsmall");
                 ln->attrs = 0;
-            } else if (big || ln->attrs) {
+            } else if (big || (ln->attrs & ~FAKE_TABLE)) {
                 Str text = ds_strip(ds_lower(&d->arena, first->run.text), 0);
                 int matched = 0;
                 for (j = 0; j < r->nheaders; j++) {
@@ -512,6 +545,8 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
     }
     for (i = 0; i < lines->n; i++) {
         Line *ln = all + i;
+        if (ln->listitem)
+            continue;
         if (!ln->predicted && !ds_is(ln->klass, "text") && !ds_is(ln->klass, "textsmall")) {
             if (ln->level <= section) {
                 for (j = 0; j < 128; j++)
@@ -520,7 +555,7 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
             }
             section = ln->level;
         } else if (ln->predicted) {
-            unsigned key = ln->attrs & 127;
+            unsigned key = ln->attrs & (127 & ~FAKE_TABLE);
             if (attr_levels[key] < 0)
                 attr_levels[key] = predicted + next++;
             ln->level = attr_levels[key];
@@ -562,6 +597,7 @@ static Row *add_row(Document *d, size_t level, Str type, Str klass) {
 }
 static int build(Document *d, Vec *lines) {
     Vec stack = {0};
+    Vec indents = {0};
     int *p;
     size_t i, j;
     Row *r = add_row(d, 0, ds_str("title"), ds_str("introduction"));
@@ -578,7 +614,23 @@ static int build(Document *d, Vec *lines) {
     *p = 0;
     for (i = 0; i < lines->n; i++) {
         Line *ln = (Line *)lines->p + i;
+        size_t content_level = stack.n - 1;
         Str text;
+        if (ln->listitem) {
+            double *indent;
+            while (indents.n > 1 &&
+                   ln->list_indent < ((double *)indents.p)[indents.n - 1] - 2)
+                indents.n--;
+            if (!indents.n || ln->list_indent > ((double *)indents.p)[indents.n - 1] + 2) {
+                indent = ds_push(&d->arena, &indents, sizeof(double));
+                if (!indent)
+                    return 0;
+                *indent = ln->list_indent;
+            } else if (indents.n == 1)
+                ((double *)indents.p)[0] = ln->list_indent;
+            content_level += indents.n - 1;
+        } else
+            indents.n = 0;
         if (ln->matrix.nr) {
             r = add_row(d, stack.n - 1, ds_str("table"), ds_str("table"));
             if (!r)
@@ -615,7 +667,7 @@ static int build(Document *d, Vec *lines) {
                 for (j = 0; j < ln->nitems; j++)
                     if (!image(ln->items + j) && !append_item(d, &items, ln->items[j]))
                         return 0;
-            r = add_row(d, stack.n - 1, ln->klass, ln->klass);
+            r = add_row(d, content_level, ln->klass, ln->klass);
             if (!r)
                 return 0;
             r->text = text;
@@ -624,7 +676,7 @@ static int build(Document *d, Vec *lines) {
         }
         for (j = 0; j < ln->nitems; j++)
             if (image(ln->items + j)) {
-                r = add_row(d, stack.n - 1, ds_str("image"), ds_str("image"));
+                r = add_row(d, content_level, ds_str("image"), ds_str("image"));
                 if (!r)
                     return 0;
                 r->text = ln->items[j].run.text;
@@ -636,6 +688,7 @@ static int build(Document *d, Vec *lines) {
 }
 int ds_standardize(Document *d, const Rules *r) {
     Vec lines = d->flow ? d->lines : (Vec){0};
-    return (d->flow || group(d, &lines)) && clean(d, r, &lines) && split(d, &lines) &&
-           classify(d, r, &lines) && build(d, &lines) && ds_tables(d, r);
+    return (d->flow || group(d, &lines)) && ds_lists(d, &lines) &&
+           clean(d, r, &lines) && split(d, &lines) &&
+           classify(d, r, &lines) && build(d, &lines) && ds_list_blocks(d) && ds_tables(d, r);
 }

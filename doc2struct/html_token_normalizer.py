@@ -15,9 +15,10 @@ Row columns
     text       the run's text (entities decoded, source whitespace kept); for an image, its alt
     flags      bitmask: BOLD 1, ITALIC 2, UNDERLINE 4, CENTERED 8
     font_size  px (int), nearest enclosing inline font-size (None if none)
-    indent     px (int), nearest enclosing element's own text-indent/padding/margin (None if none)
+    indent     px (int), nearest enclosing element's own text-indent/padding/margin (None if none);
+               native list items also include 40px per nested list beyond the first
     href       link target of the enclosing <a> ('' if it has none, None outside links)
-    tag        innermost enclosing block tag (p, div, h1-h6, li, td, th)
+    tag        innermost enclosing block tag (p, div, h1-h6, li, td, th); native list-item content uses li
     src        image source; set only on image rows
 
 Hidden: only inline display:none (options add the `hidden` attribute and visibility). Nested tables are flattened

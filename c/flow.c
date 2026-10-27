@@ -257,6 +257,37 @@ static int table_finish(Flow *flow, Line *line) {
             for (x = 0; x < cell->cs; x++)
                 grid[(cell->row + y) * nc + cell->col + x] = cell;
     }
+    for (i = 0; i < flow->cells.n; i++)
+        if (ds_strip(cells[i].text, 1).n)
+            break;
+    if (i < flow->cells.n) {
+        size_t length;
+        Str text = ds_strip(cells[i].text, 1);
+        if (ds_list_marker(text, &length) && length == text.n) {
+            Item *items = ds_alloc(&d->arena, flow->cells.n * sizeof(Item));
+            if (!items)
+                return 0;
+            for (i = 0; i < flow->cells.n; i++) {
+                FlowCell *cell = cells + i;
+                Run *run = &items[i].run;
+                run->text = cell->text;
+                run->row = cell->row;
+                run->col = cell->col;
+                run->rowspan = cell->rs;
+                run->colspan = cell->cs;
+                run->flags = cell->flags;
+                run->href = cell->href;
+                run->font = cell->font;
+                run->indent = cell->indent;
+                run->has_font = cell->has_font;
+                run->has_indent = cell->has_indent;
+                run->font_float = cell->font_float;
+                run->indent_float = cell->indent_float;
+            }
+            if (!ds_list_table(d, line, items, flow->cells.n))
+                return 0;
+        }
+    }
     for (i = 0; i < nr; i++) {
         for (j = 0; j < nc; j++)
             if (grid[i * nc + j] && grid[i * nc + j]->text.n)

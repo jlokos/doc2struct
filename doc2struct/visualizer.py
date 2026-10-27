@@ -22,6 +22,14 @@ td.empty{background:#fafafa}
 .st-title{font-weight:bold;background:#DCEDC8;border-left-color:#7CB342;padding:6px 8px;margin-top:12px}
 .st-text{background:#E8EAF6}
 .st-textsmall{background:#F5F5F5;font-size:12px;color:#555}
+.st-list{background:#F3E5F5;border-left-color:#AB47BC;padding:8px}
+.list-meta{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.list-meta .tag{color:#7B1FA2}
+.list-meta .badge{margin-left:auto}
+.list-title{font-weight:bold;margin-bottom:6px}
+.st-listitem{display:flex;align-items:baseline;gap:8px;padding:3px 0}
+.st-listitem .listitem-text{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.st-listitem .badge{flex:none;margin-left:auto;white-space:nowrap}
 .st-image{background:#FFF3E0;font-style:italic}
 .badge{font-family:monospace;font-size:11px;background:#fff;border:1px solid #bbb;border-radius:3px;padding:0 4px;margin-left:8px;font-weight:normal;color:#555}
 .cleaned{background:#B2DFDB}.dirty{background:#FFECB3}
@@ -151,13 +159,39 @@ def _st_table(r):
     return ''.join(out)
 
 
+def _st_list(r):
+    """A grouped list: matrix rows are [relative depth, original item text]."""
+    matrix = r['matrix'] or []
+    meta = f"level {r['level']} · {len(matrix)} items"
+    if r.get('id') is not None:
+        meta += f" · id {r['id']}"
+    out = [
+        f"<div class='st st-list' style='margin-left:{r['level'] * 24}px'>",
+        f"<div class='list-meta'><span class='tag'>list</span>"
+        f"<span class='badge'>{escape(meta)}</span></div>",
+    ]
+    if r.get('text'):
+        out.append(f"<div class='list-title'>{escape(r['text'])}</div>")
+    for depth, text in matrix:
+        out.append(
+            f"<div class='st-listitem' style='margin-left:{int(depth) * 24}px'>"
+            f"<span class='listitem-text'>{escape(text)}</span>"
+            f"<span class='badge'>depth {escape(depth)}</span></div>"
+        )
+    out.append('</div>')
+    return ''.join(out)
+
+
 def visualize_standardized_text(rows, filename='standardized_text_visualization.html', open_browser=True):
-    """rows: output of convert_instructions_to_standardized_text. Indented by level; titles show class and standardized_title."""
+    """Render standardized rows, including grouped lists with relative item depths."""
     out = [_CSS]
     for r in rows:
         kind = r['type']
         if kind == 'table':
             out.append(_st_table(r))
+            continue
+        if kind == 'list':
+            out.append(_st_list(r))
             continue
         pad = f"margin-left:{r['level'] * 24}px"
         text = escape(r['text'] or '')

@@ -1,4 +1,9 @@
-"""Run native standardization on inspectable Python instruction rows."""
+"""Run native standardization on inspectable Python instruction rows.
+
+A list is one row with type="list". Its matrix contains string pairs
+[relative_depth, item_text], retaining any source markers in item_text.
+The row's level places the whole list in the document; its text is empty.
+"""
 from ._engine import _native, prepare
 
 DEFAULT_COLUMNS = ('id', 'level', 'type', 'text', 'matrix', 'cleaned', 'preamble', 'footnotes', 'postamble')

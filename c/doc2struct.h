@@ -141,7 +141,15 @@ typedef struct {
     int level, predicted;
     unsigned attrs;
     Str klass, title;
+    struct ListLines *list;
+    int listitem, list_kind;
+    double list_indent;
 } Line;
+
+typedef struct ListLines {
+    Line *lines;
+    size_t n;
+} ListLines;
 typedef struct {
     Str id, text;
 } Note;
@@ -197,6 +205,10 @@ void *ds_normalizer(Document *, Options);
 int ds_normalize_token(void *, int, Str, const Attrs *);
 int ds_normalize_finish(void *);
 int ds_standardize(Document *, const Rules *);
+int ds_list_marker(Str, size_t *);
+int ds_list_table(Document *, Line *, Item *, size_t);
+int ds_lists(Document *, Vec *);
+int ds_list_blocks(Document *);
 int ds_parse(Document *, Str, const Rules *, Options);
 /* Contexts have one owner and no worker threads. Initialize once; free each
  * document before destroying its context. Clear releases only cached blocks. */

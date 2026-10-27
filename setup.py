@@ -38,7 +38,7 @@ setup(
         'doc2struct._native',
         sources=[
             'c/memory.c', 'c/text.c', 'c/tokenizer.c', 'c/normalizer.c',
-            'c/rules.c', 'c/parser.c', 'c/standardized_text.c', 'c/flow.c', 'c/json.c', 'c/tables.c', 'c/python/module.c',
+            'c/rules.c', 'c/parser.c', 'c/standardized_text.c', 'c/lists.c', 'c/flow.c', 'c/json.c', 'c/tables.c', 'c/python/module.c',
         ] + [str(pcre / ('pcre2_' + name + '.c')) for name in pcre_sources],
         include_dirs=['c', str(pcre)],
         depends=['c/doc2struct.h', 'c/unicode_data.h', 'c/scan.h', 'c/tags.h'] + [str(p) for p in pcre.glob('*.h')],

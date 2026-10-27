@@ -10,6 +10,9 @@ typedef struct {
     Str tag, href, block_tag;
     unsigned flags, props;
     double font, indent;
+    double list_indent;
+    size_t list_depth;
+    int list_item;
     int has_font, has_indent, suppressed, hides, act, root;
 } Frame;
 typedef struct {
@@ -223,6 +226,11 @@ static int emit(Normalizer *n, Str text, Str src, int blank) {
         r->has_indent = f->has_indent;
         r->href = f->href;
         r->tag = f->block_tag;
+        if (f->list_item && !n->cell) {
+            r->tag = ds_str("li");
+            r->indent = f->list_indent;
+            r->has_indent = 1;
+        }
     }
     if (n->d->flow)
         return ds_flow_run(n->d, r);
@@ -437,6 +445,15 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
         f->flags |= UNDERLINE;
     else if (props & T_A)
         f->href = a->value[A_HREF].p ? a->value[A_HREF] : ds_str("");
+    if (props & T_LIST) {
+        break_line(n);
+        f->list_depth++;
+        f->list_item = 0;
+    } else if (props & T_LI) {
+        break_line(n);
+        f->list_item = 1;
+        f->list_indent = f->indent + (f->list_depth > 1 ? (f->list_depth - 1) * 40 : 0);
+    }
     if (props & T_TABLE) {
         n->table_depth++;
         break_line(n);
