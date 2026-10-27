@@ -4,6 +4,7 @@ __pycache__/
 *.pyd
 *.so
 python/_native_source/
+python/src/doc2struct/_pdfium/
 *.egg-info/
 build/
 dist/

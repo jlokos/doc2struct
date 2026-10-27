@@ -1,10 +1,12 @@
 """Native build support; optional MSVC PGO never changes default CPU targets."""
 import hashlib
 import importlib.util
+import importlib.metadata
 import json
 import os
 from pathlib import Path
 import runpy
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,6 +36,30 @@ class BuildNative(build_ext):
 
     def run(self):
         super().run()
+        # Ship a private engine so another PDFium wrapper cannot initialize or
+        # destroy our engine, or bypass the C library's PDFium mutex.
+        spec = importlib.util.find_spec('pypdfium2_raw')
+        if not spec or not spec.origin:
+            raise SetupError('PDFium is required: install the pypdfium2 build dependency')
+        source = Path(spec.origin).parent
+        binaries = [p for p in source.iterdir() if p.suffix in ('.dll', '.so', '.dylib')]
+        if len(binaries) != 1:
+            raise SetupError('Expected one shared PDFium library in pypdfium2_raw')
+        binary = binaries[0]
+        destinations = [Path(self.build_lib) / 'doc2struct' / '_pdfium']
+        if self.inplace:
+            destinations.append(Path(self.get_finalized_command('build_py').get_package_dir('doc2struct')) / '_pdfium')
+        distribution = importlib.metadata.distribution('pypdfium2')
+        licenses = [p for p in distribution.files or () if 'BUILD_LICENSES' in p.parts]
+        if not licenses:
+            raise SetupError('PDFium redistribution licenses were not found')
+        for destination in destinations:
+            destination.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(binary, destination / ('doc2struct_pdfium' + binary.suffix))
+            shutil.copy2(source / 'version.json', destination / 'version.json')
+            (destination / 'licenses').mkdir(exist_ok=True)
+            for license in licenses:
+                shutil.copy2(distribution.locate_file(license), destination / 'licenses' / license.name)
 
     def get_ext_fullpath(self, name):
         if self._pgo_output is not None:

@@ -23,13 +23,16 @@ def html_documents(directory):
 if __name__ == "__main__":
     total_parse_time = 0.0
     total_bytes = 0
+    total_chars = 0
     total_files = 0
     for html_bytes in html_documents(directory):
         start = perf_counter()
         rows = parse_html(html_bytes, "SEC:10-K")
         total_parse_time += perf_counter() - start
         total_bytes += len(html_bytes)
+        total_chars += len(html_bytes.decode("utf-8", errors="replace"))
         total_files += 1
 
     print(f"Total parsing time for {total_files} files: {total_parse_time:.3f} seconds")
     print(f"Total parsed: {total_bytes / 1_000_000:.3f} MB")
+    print(f"Total characters: {total_chars:,}")

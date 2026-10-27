@@ -232,9 +232,9 @@ static PyObject *export_runs(Document *d) {
                      : Py_NewRef(Py_None)) ||
             !setstr(row, "text", r->text) ||
             !set(row, "flags", PyLong_FromUnsignedLong(r->flags)) ||
-            !set(row, "font_size", r->has_font ? PyLong_FromDouble(r->font) : Py_NewRef(Py_None)) ||
+            !set(row, "font_size", r->has_font ? (r->font_float ? PyFloat_FromDouble(r->font) : PyLong_FromDouble(r->font)) : Py_NewRef(Py_None)) ||
             !set(row, "indent",
-                 r->has_indent ? PyLong_FromDouble(r->indent) : Py_NewRef(Py_None)) ||
+                 r->has_indent ? (r->indent_float ? PyFloat_FromDouble(r->indent) : PyLong_FromDouble(r->indent)) : Py_NewRef(Py_None)) ||
             !setstr(row, "href", r->href) || !setstr(row, "tag", r->tag) ||
             !setstr(row, "src", r->src)) {
             Py_DECREF(row);
@@ -1024,7 +1024,71 @@ static PyObject *parse_html(PyObject *self, PyObject *args) {
 static PyObject *parse_native(PyObject *self, PyObject *args) {
     return parse_html_impl(self, args, 1);
 }
+static PyObject *pdfium_init(PyObject *self, PyObject *path) {
+    const char *name = PyUnicode_AsUTF8(path);
+    doc2struct_error error;
+    int ok;
+    if (!name) return NULL;
+    Py_BEGIN_ALLOW_THREADS
+    ok = doc2struct_pdfium_init(name, &error);
+    Py_END_ALLOW_THREADS
+    if (!ok) { native_error(error.message); return NULL; }
+    Py_RETURN_NONE;
+}
+
+static PyObject *pdf_impl(PyObject *self, PyObject *args, int instructions) {
+    PyObject *pdf, *capsule = NULL, *parser_capsule = Py_None, *owner = NULL, *result = NULL;
+    const char *password = NULL;
+    NativeParser *parser;
+    Rules *rules = NULL;
+    Document *document;
+    doc2struct_error error;
+    Str bytes;
+    int with_rules = 0;
+    if (instructions) {
+        if (!PyArg_ParseTuple(args, "O|z:pdf_instructions", &pdf, &password)) return NULL;
+    } else {
+        if (!PyArg_ParseTuple(args, "OOp|zO:parse_pdf", &pdf, &capsule, &with_rules,
+                              &password, &parser_capsule)) return NULL;
+        rules = PyCapsule_GetPointer(capsule, "doc2struct.Rules");
+        if (!rules) return NULL;
+    }
+    if (!PyBytes_Check(pdf) && !PyByteArray_Check(pdf)) {
+        PyErr_SetString(PyExc_TypeError, "PDF input must be bytes or bytearray");
+        return NULL;
+    }
+    if (parser_capsule == Py_None) {
+        parser_capsule = default_parser(self);
+        if (!parser_capsule) return NULL;
+        parser = PyCapsule_GetPointer(parser_capsule, "doc2struct.Parser");
+        if (!parser) return NULL;
+        if (parser->busy) parser = NULL;
+    } else {
+        parser = idle_parser(parser_capsule);
+        if (!parser) return NULL;
+        if (parser->closed) { PyErr_SetString(PyExc_ValueError, "Parser is closed"); return NULL; }
+    }
+    if (!input(pdf, &bytes, &owner)) return NULL;
+    if (parser) parser->busy = 1;
+    Py_BEGIN_ALLOW_THREADS
+    document = instructions
+        ? doc2struct_pdf_instructions(parser ? parser->context : NULL, bytes, password, &error)
+        : doc2struct_parse_pdf(parser ? parser->context : NULL, bytes, rules, password, &error);
+    Py_END_ALLOW_THREADS
+    if (document) result = instructions ? export_runs(document) : export_rows(document,rules,with_rules);
+    else native_error(error.message);
+    doc2struct_document_free(document);
+    if (parser) parser->busy = 0;
+    Py_XDECREF(owner);
+    return result;
+}
+static PyObject *parse_pdf(PyObject *self, PyObject *args) { return pdf_impl(self,args,0); }
+static PyObject *pdf_instructions(PyObject *self, PyObject *args) { return pdf_impl(self,args,1); }
+
 static PyMethodDef methods[] = {
+    {"pdfium_init", pdfium_init, METH_O, "Initialize the required private PDFium engine."},
+    {"parse_pdf", parse_pdf, METH_VARARGS, "Extract, lay out and standardize PDF bytes in C."},
+    {"pdf_instructions", pdf_instructions, METH_VARARGS, "Extract PDF instructions in C."},
     {"merge_rules",merge_rules,METH_VARARGS,"Extend rules using native merge semantics."},
     {"prepare_preset",prepare_preset,METH_O,"Compile a bundled preset in C."},
     {"defaults_json",defaults_json,METH_NOARGS,"Return canonical defaults."},

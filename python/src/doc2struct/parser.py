@@ -1,4 +1,4 @@
-"""HTML to standardized rows, with native intermediate storage."""
+"""HTML and PDF to standardized rows, with native intermediate storage."""
 from ._engine import _native, prepare
 from .rules import NormalizerOptions
 
@@ -12,8 +12,16 @@ def parse_html(html, rules=None, options=NormalizerOptions()):
 
 
 def clear_parser_cache():
-    """Release memory cached by parse_html; subsequent calls remain usable."""
+    """Release the default parser's cached memory; subsequent calls remain usable."""
     _native.clear_parser_cache()
+
+
+def parse_pdf(pdf, rules=None, *, password=None):
+    """Parse PDF bytes through native extraction, layout, and standardization.
+
+    Extracts embedded text; image-only pages require OCR elsewhere.
+    """
+    return _native.parse_pdf(pdf, prepare(rules), rules is not None, password)
 
 
 class Parser:
@@ -34,6 +42,10 @@ class Parser:
             options.hide_hidden_attr, options.hide_visibility, options.max_span,
             self._handle,
         )
+
+    def parse_pdf(self, pdf, rules=None, *, password=None):
+        """Parse PDF bytes using this parser's native memory cache."""
+        return _native.parse_pdf(pdf, prepare(rules), rules is not None, password, self._handle)
 
     @property
     def cache_size(self):

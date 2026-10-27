@@ -100,6 +100,35 @@ size_t doc2struct_parser_cached_bytes(const doc2struct_parser *);
 doc2struct_document *doc2struct_parse(doc2struct_parser *, doc2struct_string input,
                                     const doc2struct_rules *, doc2struct_options,
                                     doc2struct_error *error);
+/* Required PDFium runtime. Pass an absolute UTF-8 path to a private copy of the
+ * shared library, not a library initialized by another wrapper. Initialization
+ * is idempotent for that path; the engine lives until process exit. PDFium calls
+ * are serialized internally; layout/standardization do not hold its lock. */
+int doc2struct_pdfium_init(const char *library_path, doc2struct_error *error);
+/* Embedded text only (no OCR). Input bytes need only live until return.
+ * NULL password means no password. Results use the same rows/runs as HTML. */
+doc2struct_document *doc2struct_parse_pdf(doc2struct_parser *, doc2struct_string input,
+                                        const doc2struct_rules *, const char *password,
+                                        doc2struct_error *error);
+doc2struct_document *doc2struct_pdf_instructions(doc2struct_parser *, doc2struct_string input,
+                                               const char *password, doc2struct_error *error);
+/* Page geometry is in points, with a top-left origin after page rotation.
+ * Page views are borrowed and valid only during the callback. Returning zero
+ * cancels extraction. Callbacks run outside the engine lock. */
+typedef struct {
+    uint32_t unicode;
+    unsigned flags; /* bold=1, italic=2 */
+    int space_before;
+    double left, top, right, bottom, x, y, font, dx, dy;
+} doc2struct_pdf_glyph;
+typedef struct {
+    size_t index, count;
+    double width, height;
+    const doc2struct_pdf_glyph *glyphs;
+} doc2struct_pdf_page;
+typedef int (*doc2struct_pdf_page_sink)(void *, const doc2struct_pdf_page *);
+int doc2struct_pdf_visit(doc2struct_string input, const char *password,
+                        doc2struct_pdf_page_sink sink, void *context, doc2struct_error *error);
 void doc2struct_document_free(doc2struct_document *);
 void doc2struct_document_detach_cache(doc2struct_document *);
 const char *doc2struct_document_error(const doc2struct_document *);
