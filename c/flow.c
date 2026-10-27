@@ -14,6 +14,7 @@ typedef struct {
     double font, indent;
     unsigned flags;
     int has_font, has_indent, font_float, indent_float;
+    Vec *hrefs;
 } FlowCell;
 
 typedef struct {
@@ -42,7 +43,7 @@ static int add_item(Flow *flow, Item value) {
     if (!item)
         return 0;
     *item = (FlowItem){value, 0};
-    return 1;
+    return ds_keep_href(flow->document, &item->item.hrefs, value.run.href);
 }
 static int append_text(Flow *flow, FlowItem *item, Str text) {
     Str old = item->item.run.text;
@@ -89,14 +90,17 @@ static int plain_run(Flow *flow, const Run *run) {
     if (image(&current) || image(&items[flow->items.n - 1].item))
         return add_item(flow, current);
     if (empty(&current) || same(&current, &items[flow->items.n - 1].item))
-        return append_text(flow, items + flow->items.n - 1, run->text);
+        return ds_keep_href(flow->document, &items[flow->items.n - 1].item.hrefs, run->href) &&
+               append_text(flow, items + flow->items.n - 1, run->text);
     for (i = flow->items.n; i; i--) {
         if (!image(&items[i - 1].item) && same(&current, &items[i - 1].item)) {
             for (j = i; j < flow->items.n; j++)
                 if (!image(&items[j].item) &&
-                    !append_text(flow, items + i - 1, items[j].item.run.text))
+                    (!ds_append_hrefs(flow->document, &items[i - 1].item.hrefs, items[j].item.hrefs) ||
+                     !append_text(flow, items + i - 1, items[j].item.run.text)))
                     return 0;
-            if (!append_text(flow, items + i - 1, run->text))
+            if (!ds_keep_href(flow->document, &items[i - 1].item.hrefs, run->href) ||
+                !append_text(flow, items + i - 1, run->text))
                 return 0;
             flow->items.n = i;
             return 1;
@@ -198,6 +202,8 @@ static int table_run(Flow *flow, const Run *run) {
     }
     if (run->href.p)
         cell->href = run->href;
+    if (!ds_keep_href(d, &cell->hrefs, run->href))
+        return 0;
     if (cell->records && cell->line != run->line && !cell_part(flow, cell, ds_str("\n")))
         return 0;
     cell->line = run->line;
@@ -263,7 +269,7 @@ static int table_finish(Flow *flow, Line *line) {
     if (i < flow->cells.n) {
         size_t length;
         Str text = ds_strip(cells[i].text, 1);
-        if (ds_list_marker(text, &length) && length == text.n) {
+        if (d->retain_table_cells || (ds_list_marker(text, &length) && length == text.n)) {
             Item *items = ds_alloc(&d->arena, flow->cells.n * sizeof(Item));
             if (!items)
                 return 0;
@@ -283,9 +289,14 @@ static int table_finish(Flow *flow, Line *line) {
                 run->has_indent = cell->has_indent;
                 run->font_float = cell->font_float;
                 run->indent_float = cell->indent_float;
+                items[i].hrefs = cell->hrefs;
             }
             if (!ds_list_table(d, line, items, flow->cells.n))
                 return 0;
+            if (d->retain_table_cells) {
+                line->table_cells = items;
+                line->ntable_cells = flow->cells.n;
+            }
         }
     }
     for (i = 0; i < nr; i++) {
@@ -322,6 +333,7 @@ static int table_finish(Flow *flow, Line *line) {
             item->run.has_indent = cell->has_indent;
             item->run.font_float = cell->font_float;
             item->run.indent_float = cell->indent_float;
+            item->hrefs = cell->hrefs;
         }
     } else if (meaningful) {
         Str *texts = ds_alloc_uninit(&d->arena, nr * nc * sizeof(Str));

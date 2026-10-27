@@ -84,6 +84,44 @@ static unsigned uflags(uint32_t cp) {
     return e ? e->flags : 0;
 }
 int ds_space(uint32_t cp) { return (uflags(cp) & 1) != 0; }
+static void phone_spaces(Str text, size_t *i) {
+    size_t k;
+    while (*i < text.n && ds_space(ds_utf8(text.p + *i, text.n - *i, &k)))
+        *i += k;
+}
+int ds_phone(Str text) {
+    size_t i = 0, start, area, group, last, k;
+    uint32_t separator;
+    phone_spaces(text, &i);
+    if (i == text.n || text.p[i++] != '(')
+        return 0;
+    if (i < text.n && text.p[i] == '+')
+        i++;
+    start = i;
+    while (i < text.n && text.p[i] >= '0' && text.p[i] <= '9')
+        i++;
+    area = i - start;
+    if (area < 2 || area > 4 || i == text.n || text.p[i++] != ')')
+        return 0;
+    phone_spaces(text, &i);
+    start = i;
+    while (i < text.n && text.p[i] >= '0' && text.p[i] <= '9')
+        i++;
+    group = i - start;
+    if (group < 2 || group > 4 || i == text.n)
+        return 0;
+    separator = ds_utf8(text.p + i, text.n - i, &k);
+    if (separator != '-' && separator != '.' && separator != 0x2011 &&
+        separator != 0x2013 && !ds_space(separator))
+        return 0;
+    i += k;
+    phone_spaces(text, &i);
+    start = i;
+    while (i < text.n && text.p[i] >= '0' && text.p[i] <= '9')
+        i++;
+    last = i - start;
+    return last >= 3 && last <= 4 && area + group + last >= 9;
+}
 static int empty_char(uint32_t c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == 0xa0 || c == 0x200b;
 }

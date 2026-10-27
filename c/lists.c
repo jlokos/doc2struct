@@ -11,6 +11,8 @@ int ds_list_marker(Str text, size_t *length) {
     text = ds_strip(text, 1);
     if (!text.n)
         return 0;
+    if (text.p[0] == '(' && ds_phone(text))
+        return 0;
     c = ds_utf8(text.p, text.n, &k);
     if (c == 0x2022 || c == 0x25e6 || c == 0x25cf || c == 0x25aa ||
         c == 0x25a0 || c == 0x25cb || c == 0x2023 || c == 0x2043 || c == 0xb7) {

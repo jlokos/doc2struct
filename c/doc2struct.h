@@ -40,7 +40,7 @@ typedef struct {
     size_t n, cap;
 } Vec;
 typedef struct {
-    unsigned flags;
+    unsigned flags, clear_flags;
     double font, indent;
     int has_font, has_indent, display_none, vis_hidden;
 } Style;
@@ -122,13 +122,15 @@ typedef struct {
     size_t ncolumns;
     long repeat_threshold;
     unsigned table_steps;
-    int single_row_to_text, title_from_section;
+    int single_row_to_text, title_from_section, unwrap_layout;
     long footnote_lines, preamble_lines, postamble_lines;
     Regex *footnote;
+    int collect_hrefs;
 } Rules;
 typedef struct {
     Run run;
     int fake_table;
+    Vec *hrefs;
 } Item;
 typedef struct {
     Str *cells;
@@ -144,6 +146,9 @@ typedef struct {
     struct ListLines *list;
     int listitem, list_kind;
     double list_indent;
+    Item *table_cells;
+    size_t ntable_cells;
+    int layout_text;
 } Line;
 
 typedef struct ListLines {
@@ -183,6 +188,8 @@ typedef struct {
     Vec runs, rows, lines;
     void *flow;
     int skip_text, skip_blank;
+    int retain_table_cells;
+    int collect_hrefs;
     TokenBuffer tokens;
     Map styles, tags;
     pcre2_match_data *match;
@@ -208,6 +215,7 @@ Str ds_lower(Arena *, Str);
 int ds_space(uint32_t);
 int ds_upper(Str);
 int ds_proper(Str);
+int ds_phone(Str);
 uint32_t ds_utf8(const char *, size_t, size_t *);
 Str ds_input(Arena *, Str);
 Str ds_unescape(Arena *, Str);
@@ -224,6 +232,8 @@ int ds_list_marker(Str, size_t *);
 int ds_list_table(Document *, Line *, Item *, size_t);
 int ds_lists(Document *, Vec *);
 int ds_list_blocks(Document *);
+int ds_keep_href(Document *, Vec **, Str);
+int ds_append_hrefs(Document *, Vec **, const Vec *);
 int ds_parse(Document *, Str, const Rules *, Options);
 /* Contexts have one owner and no worker threads. Initialize once; free each
  * document before destroying its context. Clear releases only cached blocks. */

@@ -18,6 +18,12 @@ table{border-collapse:collapse;background:white}
 td{border:2px solid #ddd;padding:10px;text-align:left;vertical-align:top}
 td.empty{background:#fafafa}
 .meta{font-size:11px;color:#888}
+.row-meta{font:11px monospace;color:#777;text-align:right;margin:2px 0}
+.row-meta a{color:inherit;text-decoration:none}
+.st:target,.table-wrapper:target{outline:2px solid #5C6BC0;scroll-margin-top:16px}
+.outline{background:#F5F5F5;border:1px solid #ddd;padding:8px 12px;margin-bottom:20px}
+.outline nav{max-height:280px;overflow:auto;margin-top:6px}
+.outline a{display:block;padding:3px 0;color:#3949AB;text-decoration:none}
 .st{margin:4px 0;padding:2px 8px;border-left:3px solid transparent}
 .st-title{font-weight:bold;background:#DCEDC8;border-left-color:#7CB342;padding:6px 8px;margin-top:12px}
 .st-text{background:#E8EAF6}
@@ -142,12 +148,24 @@ def visualize_instructions(rows, filename='instructions_visualization.html', ope
     _open(''.join(out), filename, open_browser)
 
 
+def _row_anchor(r):
+    return f" id='{escape('row-' + str(r['id']))}'" if r.get('id') is not None else ''
+
+
+def _row_meta(r):
+    if r.get('id') is None:
+        return ''
+    anchor = escape('row-' + str(r['id']))
+    label = escape(f"#{r['id']} · {r['type']} · level {r['level']}")
+    return f"<div class='row-meta'><a href='#{anchor}'>{label}</a></div>"
+
+
 def _st_table(r):
     """A table with its title, preamble, footnotes and postamble, in document order."""
     info = r.get('cleaned')
     issues = [s for s in info if s.startswith('unresolved_') or s == 'ambiguous_text_attachment'] if isinstance(info, list) else []
     cls = 'dirty' if info is False or issues else 'cleaned'
-    out = [f"<div class='table-wrapper' style='margin-left:{r['level'] * 24}px'><div class='tbl'>"]
+    out = [f"<div class='table-wrapper'{_row_anchor(r)} style='margin-left:{r['level'] * 24}px'><div class='tbl'>", _row_meta(r)]
     if r.get('text'):
         out.append(f"<div class='tbl-title'><span class='tag'>title</span>{escape(r['text'])}</div>")
     if r.get('preamble'):
@@ -178,7 +196,8 @@ def _st_list(r):
     if r.get('id') is not None:
         meta += f" · id {r['id']}"
     out = [
-        f"<div class='st st-list' style='margin-left:{r['level'] * 24}px'>",
+        f"<div class='st st-list'{_row_anchor(r)} style='margin-left:{r['level'] * 24}px'>",
+        _row_meta(r),
         f"<div class='list-meta'><span class='tag'>list</span>"
         f"<span class='badge'>{escape(meta)}</span></div>",
     ]
@@ -196,7 +215,18 @@ def _st_list(r):
 
 def visualize_standardized_text(rows, filename='standardized_text_visualization.html', open_browser=True):
     """Render standardized rows, including grouped lists with relative item depths."""
+    rows = list(rows)
     out = [_CSS]
+    sections = [r for r in rows if r['type'] == 'title' and r.get('id') is not None
+                and r.get('class') not in (None, 'introduction', 'predicted header')]
+    if sections:
+        out.append(f"<details class='outline'><summary>Recognized sections ({len(sections)})</summary><nav>")
+        for r in sections:
+            label = r['text'] or r.get('standardized_title') or ''
+            if len(label) > 120:
+                label = label[:117] + '…'
+            out.append(f"<a href='#row-{escape(str(r['id']))}' style='margin-left:{r['level'] * 12}px'>{escape(label)}</a>")
+        out.append('</nav></details>')
     for r in rows:
         kind = r['type']
         if kind == 'table':
@@ -210,10 +240,10 @@ def visualize_standardized_text(rows, filename='standardized_text_visualization.
         if kind == 'title':
             badge = ' '.join(x for x in (r.get('class'), r.get('standardized_title')) if x)
             badge = f"<span class='badge'>{escape(badge)}</span>" if badge else ''
-            out.append(f"<div class='st st-title' style='{pad}'>{text}{badge}</div>")
+            out.append(f"<div class='st st-title'{_row_anchor(r)} style='{pad}'>{_row_meta(r)}{text}{badge}</div>")
         elif kind == 'image':
-            out.append(f"<div class='st st-image' style='{pad}'>[image] {text}</div>")
+            out.append(f"<div class='st st-image'{_row_anchor(r)} style='{pad}'>{_row_meta(r)}[image] {text}</div>")
         else:
-            out.append(f"<div class='st st-{kind}' style='{pad}'>{text}</div>")
+            out.append(f"<div class='st st-{kind}'{_row_anchor(r)} style='{pad}'>{_row_meta(r)}{text}</div>")
     out.append('</body></html>')
     _open(''.join(out), filename, open_browser)

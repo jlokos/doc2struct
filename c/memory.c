@@ -242,6 +242,30 @@ Str ds_join(Arena *a, Str *parts, size_t n, Str sep) {
     p[total] = 0;
     return (Str){p, total};
 }
+int ds_keep_href(Document *d, Vec **values, Str href) {
+    Str *slot;
+    if (!d->collect_hrefs || !href.p)
+        return 1;
+    if (!*values) {
+        *values = ds_alloc(&d->arena, sizeof(Vec));
+        if (!*values)
+            return 0;
+    }
+    slot = ds_push(&d->arena, *values, sizeof(Str));
+    if (!slot)
+        return 0;
+    *slot = href;
+    return 1;
+}
+int ds_append_hrefs(Document *d, Vec **target, const Vec *source) {
+    size_t i;
+    if (!d->collect_hrefs || !source || *target == source)
+        return 1;
+    for (i = 0; i < source->n; i++)
+        if (!ds_keep_href(d, target, ((Str *)source->p)[i]))
+            return 0;
+    return 1;
+}
 void ds_document_free(Document *d) {
     if (d->match)
         pcre2_match_data_free(d->match);

@@ -211,7 +211,8 @@ A custom column has:
 For example, an `href` column reads `href` from all instruction cells of a line, and an `item` column reads the number out of "Item 1A".
 
 # todo
-- make tables better
+- missing some lists i think
+- have it improve document types as well
 - add pdf support (via doc2dict)
 - add txt support (probably just newlines + custom tokenizer)
 - tell sol to improve rulesets - get confirmation first

@@ -69,12 +69,13 @@ class TableRules:
     footnote_lines: int = DEFAULT_FOOTNOTE_LINES              # continuation lines per footnote
     preamble_lines: int = DEFAULT_PREAMBLE_LINES              # 0 = off
     postamble_lines: int = DEFAULT_POSTAMBLE_LINES            # 0 = off
+    unwrap_layout: bool = False          # unwrap prose tables containing explicit section headings
 
     def to_dict(self):
         return {'steps': list(self.steps), 'single_row_to_text': self.single_row_to_text,
                 'title_from_section': self.title_from_section, 'footnote_regex': self.footnote_regex,
                 'footnote_lines': self.footnote_lines, 'preamble_lines': self.preamble_lines,
-                'postamble_lines': self.postamble_lines}
+                'postamble_lines': self.postamble_lines, 'unwrap_layout': self.unwrap_layout}
 
     @classmethod
     def from_dict(cls, d):
@@ -85,7 +86,8 @@ class TableRules:
                    footnote_regex=d.get('footnote_regex', base.footnote_regex),
                    footnote_lines=int(d.get('footnote_lines', base.footnote_lines)),
                    preamble_lines=int(d.get('preamble_lines', base.preamble_lines)),
-                   postamble_lines=int(d.get('postamble_lines', base.postamble_lines)))
+                   postamble_lines=int(d.get('postamble_lines', base.postamble_lines)),
+                   unwrap_layout=bool(d.get('unwrap_layout', base.unwrap_layout)))
 
 
 @dataclass(frozen=True)

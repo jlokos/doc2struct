@@ -169,6 +169,7 @@ static PyObject *prepare_rules(PyObject *self, PyObject *config) {
         goto error;
     r->single_row_to_text = boolean(sub, "single_row_to_text");
     r->title_from_section = boolean(sub, "title_from_section");
+    r->unwrap_layout = boolean(sub, "unwrap_layout");
     r->footnote_lines = integer(sub, "footnote_lines");
     r->preamble_lines = integer(sub, "preamble_lines");
     r->postamble_lines = integer(sub, "postamble_lines");
@@ -214,6 +215,8 @@ static PyObject *prepare_rules(PyObject *self, PyObject *config) {
         sub = PySequence_Fast_GET_ITEM(seq, i);
         c->name = string(&r->arena, get(sub, "name"));
         c->source = string(&r->arena, get(sub, "source"));
+        if (ds_is(c->source, "href"))
+            r->collect_hrefs = 1;
         c->dtype = string(&r->arena, get(sub, "dtype"));
         c->which = string(&r->arena, get(sub, "which"));
         value = PyDict_GetItemString(sub, "pattern");
@@ -650,7 +653,7 @@ static PyObject *source(Item *it, Str name) {
     return Py_NewRef(Py_None);
 }
 static PyObject *custom(Document *d, Column *c, Row *r) {
-    size_t i;
+    size_t i, j;
     int all = ds_is(c->which, "all") || ds_is(c->dtype, "list");
     PyObject *values;
     if (ds_is(r->type, "table"))
@@ -678,21 +681,26 @@ static PyObject *custom(Document *d, Column *c, Row *r) {
     if (!values)
         return NULL;
     for (i = 0; i < r->nitems; i++) {
-        PyObject *v = source(r->items + i, c->source), *converted;
-        if (!v)
-            goto error;
-        if (v == Py_None) {
-            Py_DECREF(v);
-            continue;
-        }
-        converted = cast(v, ds_is(c->dtype, "list") ? ds_str("str") : c->dtype);
-        if (!converted)
-            goto error;
-        if (PyList_Append(values, converted) < 0) {
+        Vec *links = ds_is(c->source, "href") ? r->items[i].hrefs : NULL;
+        size_t count = links ? links->n : 1;
+        for (j = 0; j < count; j++) {
+            PyObject *v = links ? unicode(((Str *)links->p)[j]) : source(r->items + i, c->source);
+            PyObject *converted;
+            if (!v)
+                goto error;
+            if (v == Py_None) {
+                Py_DECREF(v);
+                continue;
+            }
+            converted = cast(v, ds_is(c->dtype, "list") ? ds_str("str") : c->dtype);
+            if (!converted)
+                goto error;
+            if (PyList_Append(values, converted) < 0) {
+                Py_DECREF(converted);
+                goto error;
+            }
             Py_DECREF(converted);
-            goto error;
         }
-        Py_DECREF(converted);
     }
     if (all)
         return values;

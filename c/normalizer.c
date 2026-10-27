@@ -170,6 +170,8 @@ Style *ds_style(Document *d, Str raw) {
         st->flags |= UNDERLINE;
     if (ds_is(values[3], "center"))
         st->flags |= CENTERED;
+    else if (member(values[3], "left right justify start end initial"))
+        st->clear_flags |= CENTERED;
     st->has_font = values[4].p != NULL;
     st->font = px(values[4]);
     st->indent =
@@ -427,7 +429,7 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
         return 1;
     }
     if (st) {
-        f->flags |= st->flags;
+        f->flags = (f->flags & ~st->clear_flags) | st->flags;
         if (st->has_font) {
             f->font = st->font;
             f->has_font = 1;

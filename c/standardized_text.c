@@ -32,6 +32,7 @@ typedef struct {
     Run *first, *font, *indent, *href;
     size_t row, col, rs, cs, index;
     unsigned flags;
+    Vec *hrefs;
 } Cell;
 static int compare_ref(const void *a, const void *b) {
     const Ref *x = a, *y = b;
@@ -166,6 +167,8 @@ static int table_line(Document *d, Run *runs, size_t n, Line *out) {
                 c->indent = r;
             if (r->href.p)
                 c->href = r;
+            if (!ds_keep_href(d, &c->hrefs, r->href))
+                return 0;
         }
         c->text = cell_text(d, runs, refs, i, j);
         if (!c->text.p)
@@ -193,7 +196,7 @@ static int table_line(Document *d, Run *runs, size_t n, Line *out) {
     if (i < ncells) {
         size_t length;
         Str text = ds_strip(cells[i].text, 1);
-        if (ds_list_marker(text, &length) && length == text.n) {
+        if (d->retain_table_cells || (ds_list_marker(text, &length) && length == text.n)) {
             Item *items = ds_alloc(&d->arena, ncells * sizeof(Item));
             if (!items)
                 return 0;
@@ -203,17 +206,24 @@ static int table_line(Document *d, Run *runs, size_t n, Line *out) {
                 items[i].run.text = c->text;
                 items[i].run.flags = c->flags;
                 items[i].run.href = c->href ? c->href->href : (Str){0};
+                items[i].hrefs = c->hrefs;
                 if (c->font) {
                     items[i].run.font = c->font->font;
+                    items[i].run.font_float = c->font->font_float;
                     items[i].run.has_font = 1;
                 }
                 if (c->indent) {
                     items[i].run.indent = c->indent->indent;
+                    items[i].run.indent_float = c->indent->indent_float;
                     items[i].run.has_indent = 1;
                 }
             }
             if (!ds_list_table(d, out, items, ncells))
                 return 0;
+            if (d->retain_table_cells) {
+                out->table_cells = items;
+                out->ntable_cells = ncells;
+            }
         }
     }
     for (i = 0; i < ncells; i++) {
@@ -255,6 +265,7 @@ static int table_line(Document *d, Run *runs, size_t n, Line *out) {
             item->run.has_font = c->font != NULL;
             item->run.has_indent = c->indent != NULL;
             item->run.href = c->href ? c->href->href : (Str){0};
+            item->hrefs = c->hrefs;
             if (c->font) {
                 item->run.font = c->font->font;
                 item->run.font_float = c->font->font_float;
@@ -300,6 +311,8 @@ static int group(Document *d, Vec *lines) {
             size_t q;
             if (!items.n && empty(&cur))
                 continue;
+            if (!ds_keep_href(d, &cur.hrefs, cur.run.href))
+                return 0;
             if (!items.n) {
                 if (!append_item(d, &items, cur))
                     return 0;
@@ -308,10 +321,12 @@ static int group(Document *d, Vec *lines) {
             if (image(&cur) || image(all + items.n - 1)) {
                 if (!append_item(d, &items, cur))
                     return 0;
-            } else if (empty(&cur) || same(&cur, all + items.n - 1))
+            } else if (empty(&cur) || same(&cur, all + items.n - 1)) {
+                if (!ds_append_hrefs(d, &all[items.n - 1].hrefs, cur.hrefs))
+                    return 0;
                 all[items.n - 1].run.text =
                     ds_cat(&d->arena, all[items.n - 1].run.text, cur.run.text);
-            else {
+            } else {
                 int merged = 0;
                 for (q = items.n; q; q--)
                     if (!image(all + q - 1) && same(&cur, all + q - 1)) {
@@ -324,11 +339,15 @@ static int group(Document *d, Vec *lines) {
                                 if (!p)
                                     return 0;
                                 *p = all[x].run.text;
+                                if (x >= q && !ds_append_hrefs(d, &all[q - 1].hrefs, all[x].hrefs))
+                                    return 0;
                             }
                         p = ds_push(&d->arena, &parts, sizeof(Str));
                         if (!p)
                             return 0;
                         *p = cur.run.text;
+                        if (!ds_append_hrefs(d, &all[q - 1].hrefs, cur.hrefs))
+                            return 0;
                         all[q - 1].run.text = ds_join(&d->arena, parts.p, parts.n, ds_str(""));
                         items.n = q;
                         merged = 1;
@@ -455,6 +474,10 @@ static unsigned attrs(Item *i) {
     return flags;
 }
 static Str line_text(Document *, Item *, size_t);
+static int phone_line(Document *d, Line *line) {
+    Str first = line->nitems ? ds_strip(line->items[0].run.text, 0) : (Str){0};
+    return first.n && first.p[0] == '(' && ds_phone(line_text(d, line->items, line->nitems));
+}
 /* Reuse the regex compiler's conservative mandatory-first-atom guard before
  * allocating normalized copies of ordinary body paragraphs. */
 static int header_candidate(const Rules *r, Line *line) {
@@ -564,13 +587,16 @@ static int split(Document *d, const Rules *r, Vec *lines) {
     size_t i;
     for (i = 0; i < lines->n; i++) {
         Line line = all[i];
-        if (!line.listitem && line.nitems && !image(line.items) && header_candidate(r, &line) &&
+        if (!line.layout_text && line.nitems && !image(line.items) && header_candidate(r, &line) &&
             header_match(d, r, &line, rule_text(d, &line)) >= 0) {
+            /* Precise explicit section rules take precedence over inferred
+             * enumeration. Lists still precede heuristic heading prediction. */
+            line.listitem = 0;
             if (!append_line(d, &out, line))
                 return 0;
             continue;
         }
-        if (!line.listitem && line.nitems > 1 && !image(line.items) &&
+        if (!line.layout_text && !line.listitem && line.nitems > 1 && !image(line.items) && !phone_line(d, &line) &&
             ((attrs(line.items) & ~FAKE_TABLE) ||
              (dominant && line.items[0].run.has_font && line.items[0].run.font > common * 1.2))) {
             Line first = line;
@@ -614,7 +640,7 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
             Str text;
             ln->attrs = attrs(first);
             matched = -1;
-            if (header_candidate(r, ln)) {
+            if (!ln->layout_text && header_candidate(r, ln)) {
                 text = rule_text(d, ln);
                 matched = header_match(d, r, ln, text);
             }
@@ -642,7 +668,7 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
                 ln->level = -2;
                 ln->klass = ds_str("textsmall");
                 ln->attrs = 0;
-            } else if (big || (ln->attrs & ~FAKE_TABLE)) {
+            } else if (!ln->layout_text && (big || (ln->attrs & ~FAKE_TABLE)) && !phone_line(d, ln)) {
                 ln->level = predicted;
                 ln->klass = ds_str("predicted header");
                 ln->predicted = 1;
@@ -749,6 +775,114 @@ static Str line_text(Document *d, Item *items, size_t n) {
             parts[count++] = fake ? ds_strip(items[i].run.text, 0) : items[i].run.text;
     return ds_join(&d->arena, parts, count, fake ? ds_str(" ") : ds_str(""));
 }
+static int layout_number(Str text) {
+    size_t i, k;
+    int digit = 0;
+    for (i = 0; i < text.n; i += k) {
+        uint32_t c = ds_utf8(text.p + i, text.n - i, &k);
+        if (c >= '0' && c <= '9') {
+            digit = 1;
+            continue;
+        }
+        if (!ds_space(c) && c != '$' && c != '%' && c != '.' && c != ',' &&
+            c != '(' && c != ')' && c != '+' && c != '-' && c != 0x2013 && c != 0x2014)
+            return 0;
+    }
+    return digit;
+}
+/* Optional, rule-driven layout-table recovery. Work with original cells, not
+ * span-expanded strings, so content is emitted once and styles remain usable.
+ * Explicit section rows plus substantial prose are required; numeric tables
+ * and tables of contents retain their matrix representation. */
+static int layout_tables(Document *d, const Rules *r, Vec *lines) {
+    Vec out = {0};
+    Line *all = lines->p;
+    size_t i;
+    if (!r->unwrap_layout || !r->nheaders)
+        return 1;
+    for (i = 0; i < lines->n; i++) {
+        Line source = all[i];
+        Vec proposed = {0};
+        size_t c, j, nonempty = 0, numbers = 0, headers = 0, prose = 0;
+        int ordered = 1;
+        if (source.matrix.nr && source.ntable_cells) {
+            for (c = 0; c < source.ntable_cells; c = j) {
+                Line row = {0};
+                Vec items = {0};
+                Str text;
+                size_t k, row_numbers = 0;
+                for (j = c + 1; j < source.ntable_cells &&
+                     source.table_cells[j].run.row == source.table_cells[c].run.row; j++)
+                    ;
+                if (c && source.table_cells[c].run.row < source.table_cells[c - 1].run.row)
+                    ordered = 0;
+                for (k = c; k < j; k++) {
+                    Item item = source.table_cells[k];
+                    item.run.text = ds_strip(item.run.text, 1);
+                    if (!item.run.text.n)
+                        continue;
+                    nonempty++;
+                    row_numbers += layout_number(item.run.text);
+                    item.fake_table = 1;
+                    item.run.tag = ds_str("td");
+                    item.run.src = (Str){0}; /* cell_text already preserves embedded ALT/SRC */
+                    item.run.in_table = 0;
+                    if (!append_item(d, &items, item))
+                        return 0;
+                }
+                if (!items.n)
+                    continue;
+                numbers += row_numbers;
+                row.items = items.p;
+                row.nitems = items.n;
+                text = rule_text(d, &row);
+                row.layout_text = 1;
+                if (!row_numbers && text.n > 240 && row.nitems > 1) {
+                    Line marker = row;
+                    Str marker_text, suffix;
+                    marker.nitems = 1;
+                    marker_text = rule_text(d, &marker);
+                    if (header_candidate(r, &marker) &&
+                        header_match(d, r, &marker, marker_text) >= 0) {
+                        Str matched = ds_group(d, marker_text, 0);
+                        suffix = ds_strip((Str){marker_text.p + matched.n,
+                                                marker_text.n - matched.n}, 0);
+                        if (!suffix.n || ds_is(suffix, ".") || ds_is(suffix, ":")) {
+                            marker.layout_text = 0;
+                            if (!append_line(d, &proposed, marker))
+                                return 0;
+                            headers++;
+                            row.items++;
+                            row.nitems--;
+                            prose++;
+                            if (!append_line(d, &proposed, row))
+                                return 0;
+                            continue;
+                        }
+                    }
+                }
+                if (!row_numbers && text.n <= 240 && header_candidate(r, &row) &&
+                    header_match(d, r, &row, text) >= 0) {
+                    headers++;
+                    row.layout_text = 0;
+                } else if (text.n >= 200)
+                    prose++;
+                if (!append_line(d, &proposed, row))
+                    return 0;
+            }
+        }
+        if (ordered && headers && prose &&
+            (!numbers || numbers < nonempty / 4 + (nonempty % 4 != 0))) {
+            Line *rows = proposed.p;
+            for (c = 0; c < proposed.n; c++)
+                if (!append_line(d, &out, rows[c]))
+                    return 0;
+        } else if (!append_line(d, &out, source))
+            return 0;
+    }
+    *lines = out;
+    return !d->arena.error[0];
+}
 static Row *add_row(Document *d, size_t level, Str type, Str klass) {
     Row *r = ds_push(&d->arena, &d->rows, sizeof(Row));
     if (!r)
@@ -811,7 +945,7 @@ static int build(Document *d, Vec *lines) {
             r->text = line_text(d, ln->items, ln->nitems);
             r->title = ln->title.n ? ln->title : (Str){0};
             r->items = ln->items;
-            r->nitems = 1;
+            r->nitems = ln->nitems;
             p = ds_push(&d->arena, &stack, sizeof(int));
             if (!p)
                 return 0;
@@ -852,7 +986,9 @@ static int build(Document *d, Vec *lines) {
 }
 int ds_standardize(Document *d, const Rules *r) {
     Vec lines = d->flow ? d->lines : (Vec){0};
-    return (d->flow || group(d, &lines)) && ds_lists(d, &lines) &&
+    d->retain_table_cells = r->unwrap_layout;
+    d->collect_hrefs = r->collect_hrefs;
+    return (d->flow || group(d, &lines)) && layout_tables(d, r, &lines) && ds_lists(d, &lines) &&
            clean(d, r, &lines) && split(d, r, &lines) &&
            classify(d, r, &lines) && build(d, &lines) && ds_list_blocks(d) && ds_tables(d, r);
 }
