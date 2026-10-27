@@ -1,0 +1,21 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# run.py output
+testing/
+
+# local filing data
+data/
+
+# editor / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
