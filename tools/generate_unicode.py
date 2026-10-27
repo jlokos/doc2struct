@@ -62,4 +62,4 @@ def generate(destination):
         destination.write_text(generated, encoding='ascii', newline='\n')
 
 if __name__ == '__main__':
-    generate(Path(__file__).with_name('unicode_data.h'))
+    generate(Path(__file__).resolve().parents[1] / 'c/src/unicode_data.h')

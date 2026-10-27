@@ -1,34 +1,46 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
-#include "doc2struct.h"
+#include <doc2struct/doc2struct.h>
+typedef doc2struct_string Str;
+typedef doc2struct_document Document;
+typedef doc2struct_rules Rules;
+typedef doc2struct_options Options;
+typedef doc2struct_run Run;
+typedef doc2struct_token Token;
+typedef doc2struct_attributes Attrs;
+typedef doc2struct_row Row;
+typedef doc2struct_column Column;
+typedef doc2struct_matrix Matrix;
+#define START DOC2STRUCT_START
+#define A_COUNT DOC2STRUCT_ATTRIBUTE_COUNT
+#define DS_DEFAULT_CACHE_SIZE DOC2STRUCT_DEFAULT_CACHE_SIZE
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
 #include <limits.h>
 
-static int native_error(Arena *a) {
-    if (!a->error[0])
-        return 0;
-    if (!strcmp(a->error, "out of memory"))
-        PyErr_NoMemory();
-    else
-        PyErr_SetString(PyExc_ValueError, a->error);
+static Str str_view(const char *p) { return (Str){p,strlen(p)}; }
+static int str_eq(Str a,Str b) { return a.n==b.n && (!a.n || !memcmp(a.p,b.p,a.n)); }
+static int str_is(Str a,const char *b) { return str_eq(a,str_view(b)); }
+static int native_error(const char *message) {
+    if (!message || !*message) return 0;
+    if (!strcmp(message,"out of memory")) PyErr_NoMemory();
+    else PyErr_SetString(PyExc_ValueError,message);
     return 1;
 }
-static Str string(Arena *a, PyObject *o) {
-    Py_ssize_t n;
-    const char *p;
-    if (!o || o == Py_None)
-        return (Str){0};
-    if (!PyUnicode_Check(o)) {
-        PyErr_SetString(PyExc_TypeError, "expected a string");
-        return (Str){0};
-    }
-    p = PyUnicode_AsUTF8AndSize(o, &n);
-    if (!p)
-        return (Str){0};
-    return ds_copy(a, (Str){p, (size_t)n});
+static Document *new_document(void) {
+    doc2struct_error error;
+    Document *d=doc2struct_document_new(&error);
+    if(!d)native_error(error.message);
+    return d;
+}
+static Str string(Document *d,PyObject *o) {
+    Py_ssize_t n; const char *p;
+    if(!o || o==Py_None)return (Str){0};
+    if(!PyUnicode_Check(o)) { PyErr_SetString(PyExc_TypeError,"expected a string");return (Str){0}; }
+    p=PyUnicode_AsUTF8AndSize(o,&n);
+    return p?doc2struct_document_copy(d,(Str){p,(size_t)n}):(Str){0};
 }
 static PyObject *unicode(Str s) {
     if (!s.p)
@@ -50,14 +62,6 @@ static PyObject *get(PyObject *d, const char *key) {
         PyErr_Format(PyExc_KeyError, "missing field: %s", key);
     return o;
 }
-static long integer(PyObject *d, const char *key) {
-    PyObject *o = get(d, key);
-    return o ? PyLong_AsLong(o) : -1;
-}
-static int boolean(PyObject *d, const char *key) {
-    PyObject *o = get(d, key);
-    return o ? PyObject_IsTrue(o) : -1;
-}
 static int set(PyObject *d, const char *key, PyObject *value) {
     int rc;
     if (!value)
@@ -68,198 +72,64 @@ static int set(PyObject *d, const char *key, PyObject *value) {
 }
 static int setstr(PyObject *d, const char *key, Str s) { return set(d, key, unicode(s)); }
 static void capsule_free(PyObject *c) {
-    Rules *r = PyCapsule_GetPointer(c, "doc2struct.Rules");
-    if (r) {
-        ds_rules_free(r);
-        free(r);
-    } else
-        PyErr_Clear();
+    Rules *r=PyCapsule_GetPointer(c,"doc2struct.Rules");
+    if(r)doc2struct_rules_free(r);else PyErr_Clear();
 }
-static PyObject *prepare_rules(PyObject *self, PyObject *config) {
-    Rules *r = calloc(1, sizeof(*r));
-    PyObject *o, *seq = NULL, *sub, *value;
-    Py_ssize_t i, j, n;
-    if (!r)
-        return PyErr_NoMemory();
-    o = get(config, "headers");
-    if (!o)
-        goto error;
-    seq = PySequence_Fast(o, "headers must be a sequence");
-    if (!seq)
-        goto error;
-    n = PySequence_Fast_GET_SIZE(seq);
-    r->headers = ds_alloc(&r->arena, (size_t)n * sizeof(Header));
-    if (!r->headers)
-        goto error;
-    r->nheaders = (size_t)n;
-    for (i = 0; i < n; i++) {
-        Header *h = r->headers + i;
-        PyObject *requires;
-        sub = PySequence_Fast_GET_ITEM(seq, i);
-        h->name = string(&r->arena, get(sub, "name"));
-        {
-            long level = integer(sub, "level");
-            if (PyErr_Occurred())
-                goto error;
-            if (level < INT_MIN || level >= INT_MAX) {
-                PyErr_SetString(PyExc_ValueError,
-                                "header level is outside the native integer range");
-                goto error;
-            }
-            h->level = (int)level;
-        }
-        h->rx = ds_regex(r, string(&r->arena, get(sub, "regex")), 0);
-        if (PyErr_Occurred() || !h->rx)
-            goto error;
-        value = PyDict_GetItemString(sub, "requires");
-        if (!value)
-            continue;
-        requires = PySequence_Fast(value, "requires must be a sequence");
-        if (!requires)
-            goto error;
-        for (j = 0; j < PySequence_Fast_GET_SIZE(requires); j++) {
-            unsigned bit = ds_style_bit(string(&r->arena, PySequence_Fast_GET_ITEM(requires, j)));
-            if (!bit) {
-                Py_DECREF(requires);
-                PyErr_SetString(PyExc_ValueError, "unknown required header style");
-                goto error;
-            }
-            h->requires |= bit;
-        }
-        Py_DECREF(requires);
+static PyObject *rules_capsule(Rules *r,doc2struct_error *error) {
+    PyObject *c;
+    if(!r){native_error(error->message);return NULL;}
+    c=PyCapsule_New(r,"doc2struct.Rules",capsule_free);
+    if(!c)doc2struct_rules_free(r);
+    return c;
+}
+static PyObject *prepare_rules(PyObject *self,PyObject *config) {
+    PyObject *serialized=NULL;const char *p;Py_ssize_t n;
+    doc2struct_error error;Rules *r;
+    if(PyDict_Check(config)) {
+        PyObject *json=PyImport_ImportModule("json");
+        if(!json)return NULL;
+        serialized=PyObject_CallMethod(json,"dumps","O",config);Py_DECREF(json);
+        if(!serialized)return NULL;
+        config=serialized;
     }
-    Py_CLEAR(seq);
-    sub = get(config, "remove");
-    if (!sub)
-        goto error;
-    value = get(sub, "repeat_threshold");
-    if (!value)
-        goto error;
-    r->repeat_threshold = value == Py_None ? 0 : PyLong_AsLong(value);
-    o = get(sub, "patterns");
-    if (!o)
-        goto error;
-    seq = PySequence_Fast(o, "patterns must be a sequence");
-    if (!seq)
-        goto error;
-    n = PySequence_Fast_GET_SIZE(seq);
-    r->remove = ds_alloc(&r->arena, (size_t)n * sizeof(Remove));
-    if (!r->remove)
-        goto error;
-    r->nremove = (size_t)n;
-    for (i = 0; i < n; i++) {
-        PyObject *pair =
-            PySequence_Fast(PySequence_Fast_GET_ITEM(seq, i), "remove pattern must be a pair");
-        if (!pair)
-            goto error;
-        if (PySequence_Fast_GET_SIZE(pair) != 2) {
-            Py_DECREF(pair);
-            PyErr_SetString(PyExc_ValueError, "remove pattern must be a pair");
-            goto error;
-        }
-        r->remove[i].rx = ds_regex(r, string(&r->arena, PySequence_Fast_GET_ITEM(pair, 0)), 0);
-        r->remove[i].needs_href = PyObject_IsTrue(PySequence_Fast_GET_ITEM(pair, 1));
-        Py_DECREF(pair);
-        if (!r->remove[i].rx || PyErr_Occurred())
-            goto error;
+    p=PyUnicode_AsUTF8AndSize(config,&n);
+    if(!p){Py_XDECREF(serialized);return NULL;}
+    r=doc2struct_rules_json(p,(size_t)n,&error);
+    Py_XDECREF(serialized);return rules_capsule(r,&error);
+}
+static PyObject *prepare_preset(PyObject *self,PyObject *name) {
+    doc2struct_error error;const char *p=NULL;Rules *r;Py_ssize_t n;
+    if(name!=Py_None) {
+        p=PyUnicode_AsUTF8AndSize(name,&n);if(!p)return NULL;
+        if(memchr(p,0,(size_t)n)){PyErr_SetString(PyExc_ValueError,"preset name contains NUL");return NULL;}
     }
-    Py_CLEAR(seq);
-    sub = get(config, "tables");
-    if (!sub)
-        goto error;
-    r->single_row_to_text = boolean(sub, "single_row_to_text");
-    r->title_from_section = boolean(sub, "title_from_section");
-    r->unwrap_layout = boolean(sub, "unwrap_layout");
-    r->footnote_lines = integer(sub, "footnote_lines");
-    r->preamble_lines = integer(sub, "preamble_lines");
-    r->postamble_lines = integer(sub, "postamble_lines");
-    value = get(sub, "footnote_regex");
-    if (!value)
-        goto error;
-    if (value != Py_None && PyObject_IsTrue(value)) {
-        r->footnote = ds_regex(r, string(&r->arena, value), 0);
-        if (!r->footnote)
-            goto error;
+    r=doc2struct_rules_preset(p,&error);return rules_capsule(r,&error);
+}
+static PyObject *defaults_json(PyObject *self,PyObject *unused) { return unicode(doc2struct_defaults_json()); }
+static PyObject *preset_packs(PyObject *self,PyObject *unused) {
+    size_t i,n=doc2struct_preset_count();PyObject *list=PyList_New((Py_ssize_t)n);
+    if(!list)return NULL;
+    for(i=0;i<n;i++) {
+        PyObject *v=unicode(doc2struct_preset_pack(i));
+        if(!v){Py_DECREF(list);return NULL;}PyList_SET_ITEM(list,(Py_ssize_t)i,v);
     }
-    o = get(sub, "steps");
-    if (!o)
-        goto error;
-    seq = PySequence_Fast(o, "table steps must be a sequence");
-    if (!seq)
-        goto error;
-    for (i = 0; i < PySequence_Fast_GET_SIZE(seq); i++) {
-        Str step = string(&r->arena, PySequence_Fast_GET_ITEM(seq, i));
-        for (j = 0; ds_table_steps[j]; j++)
-            if (ds_is(step, ds_table_steps[j]))
-                break;
-        if (!ds_table_steps[j]) {
-            PyErr_SetString(PyExc_ValueError, "unknown table step");
-            goto error;
-        }
-        r->table_steps |= 1u << j;
-    }
-    Py_CLEAR(seq);
-    o = get(config, "columns");
-    if (!o)
-        goto error;
-    seq = PySequence_Fast(o, "columns must be a sequence");
-    if (!seq)
-        goto error;
-    n = PySequence_Fast_GET_SIZE(seq);
-    r->columns = ds_alloc(&r->arena, (size_t)n * sizeof(Column));
-    if (!r->columns)
-        goto error;
-    r->ncolumns = (size_t)n;
-    for (i = 0; i < n; i++) {
-        Column *c = r->columns + i;
-        sub = PySequence_Fast_GET_ITEM(seq, i);
-        c->name = string(&r->arena, get(sub, "name"));
-        c->source = string(&r->arena, get(sub, "source"));
-        if (ds_is(c->source, "href"))
-            r->collect_hrefs = 1;
-        c->dtype = string(&r->arena, get(sub, "dtype"));
-        c->which = string(&r->arena, get(sub, "which"));
-        value = PyDict_GetItemString(sub, "pattern");
-        if (value && value != Py_None && PyObject_IsTrue(value)) {
-            c->rx = ds_regex(r, string(&r->arena, value), 1);
-            if (!c->rx)
-                goto error;
-        }
-        value = PyDict_GetItemString(sub, "types");
-        if (value && value != Py_None) {
-            PyObject *types = PySequence_Fast(value, "column types must be a sequence");
-            if (!types)
-                goto error;
-            c->ntypes = (size_t)PySequence_Fast_GET_SIZE(types);
-            c->filter_types = c->ntypes != 0;
-            c->types = ds_alloc(&r->arena, c->ntypes * sizeof(Str));
-            if (!c->types) {
-                Py_DECREF(types);
-                goto error;
-            }
-            for (j = 0; j < (Py_ssize_t)c->ntypes; j++)
-                c->types[j] = string(&r->arena, PySequence_Fast_GET_ITEM(types, j));
-            Py_DECREF(types);
-        }
-    }
-    Py_CLEAR(seq);
-    if (PyErr_Occurred() || native_error(&r->arena))
-        goto error;
-    {
-        PyObject *capsule = PyCapsule_New(r, "doc2struct.Rules", capsule_free);
-        if (!capsule)
-            goto error;
-        return capsule;
-    }
-error:
-    Py_XDECREF(seq);
-    if (!PyErr_Occurred())
-        native_error(&r->arena);
-    if (!PyErr_Occurred())
-        PyErr_SetString(PyExc_ValueError, "invalid native rules");
-    ds_rules_free(r);
-    free(r);
-    return NULL;
+    return list;
+}
+static PyObject *resolve_rules(PyObject *self,PyObject *args) {
+    const char *input;Py_ssize_t n;int preset=0;size_t size;char *out;
+    doc2struct_error error;PyObject *result;
+    if(!PyArg_ParseTuple(args,"s#|p:resolve_rules",&input,&n,&preset))return NULL;
+    out=doc2struct_rules_resolve(input,(size_t)n,preset,&size,&error);
+    if(!out){native_error(error.message);return NULL;}
+    result=unicode((Str){out,size});doc2struct_buffer_free(out);return result;
+}
+static PyObject *merge_rules(PyObject *self,PyObject *args) {
+    const char *base,*extra;Py_ssize_t nb,ne;size_t size;char *out;
+    doc2struct_error error;PyObject *result;
+    if(!PyArg_ParseTuple(args,"s#s#:merge_rules",&base,&nb,&extra,&ne))return NULL;
+    out=doc2struct_rules_merge_json((Str){base,(size_t)nb},(Str){extra,(size_t)ne},&size,&error);
+    if(!out){native_error(error.message);return NULL;}
+    result=unicode((Str){out,size});doc2struct_buffer_free(out);return result;
 }
 static int input(PyObject *o, Str *out, PyObject **owner) {
     Py_ssize_t n;
@@ -285,19 +155,15 @@ static int input(PyObject *o, Str *out, PyObject **owner) {
     *out = (Str){PyBytes_AS_STRING(o), (size_t)PyBytes_GET_SIZE(o)};
     return 1;
 }
-static int token_sink(void *ctx, int kind, Str value, const Attrs *a) {
-    return ds_store_token(ctx, kind, value, a);
-}
 static PyObject *export_tokens(Document *d) {
     static const char *names[] = {"style", "colspan", "rowspan", "href", "src", "alt", "hidden"};
-    PyObject *list = PyList_New((Py_ssize_t)d->tokens.n);
-    size_t i = 0, j, k;
-    TokenChunk *chunk;
+    PyObject *list = PyList_New((Py_ssize_t)doc2struct_token_count(d));
+    size_t i = 0, j;
+    doc2struct_token_iterator iterator={0};
+    const Token *t;
     if (!list)
         return NULL;
-    for (chunk = d->tokens.first; chunk; chunk = chunk->next) {
-        for (k = 0; k < chunk->used; k++, i++) {
-            Token *t = chunk->data + k;
+    while ((t=doc2struct_token_next(d,&iterator))) {
             PyObject *attrs = Py_NewRef(Py_None), *tuple, *text = unicode(t->value);
             if (!text)
                 goto error;
@@ -318,8 +184,7 @@ static PyObject *export_tokens(Document *d) {
             tuple = Py_BuildValue("iNN", t->kind, text, attrs);
             if (!tuple)
                 goto error;
-            PyList_SET_ITEM(list, (Py_ssize_t)i, tuple);
-        }
+            PyList_SET_ITEM(list, (Py_ssize_t)i++, tuple);
     }
     return list;
 error:
@@ -327,31 +192,33 @@ error:
     return NULL;
 }
 static PyObject *tokenize(PyObject *self, PyObject *html) {
-    Document d = {0};
+    Document *d = NULL;
     Str text;
     PyObject *owner = NULL, *result = NULL;
     int ok;
     if (!input(html, &text, &owner))
         goto done;
-    Py_BEGIN_ALLOW_THREADS text = ds_input(&d.arena, text);
-    ok = text.p && ds_tokenize(&d, text, token_sink, &d);
+    if(!(d=new_document()))goto done;
+    Py_BEGIN_ALLOW_THREADS ok = doc2struct_tokenize(d, text);
     Py_END_ALLOW_THREADS if (!ok) {
-        native_error(&d.arena);
+        native_error(doc2struct_document_error(d));
         goto done;
     }
-    result = export_tokens(&d);
+    result = export_tokens(d);
 done:
-    ds_document_free(&d);
+    doc2struct_document_free(d);
     Py_XDECREF(owner);
     return result;
 }
 static PyObject *export_runs(Document *d) {
-    PyObject *list = PyList_New((Py_ssize_t)d->runs.n);
+    size_t nruns;
+    const Run *runs=doc2struct_document_runs(d,&nruns);
+    PyObject *list = PyList_New((Py_ssize_t)nruns);
     size_t i;
     if (!list)
         return NULL;
-    for (i = 0; i < d->runs.n; i++) {
-        Run *r = (Run *)d->runs.p + i;
+    for (i = 0; i < nruns; i++) {
+        const Run *r = runs + i;
         PyObject *row = PyDict_New();
         if (!row)
             goto error;
@@ -398,15 +265,15 @@ static int import_tokens(Document *d, PyObject *tokens) {
             PyErr_SetString(PyExc_ValueError, "token must contain three values");
             goto error;
         }
-        dst = ds_new_token(d);
+        dst = doc2struct_add_token(d);
         if (!dst) {
             Py_DECREF(t);
-            native_error(&d->arena);
+            native_error(doc2struct_document_error(d));
             goto error;
         }
         dst->kind = (int)PyLong_AsLong(PySequence_Fast_GET_ITEM(t, 0));
         dst->attrs = NULL;
-        dst->value = string(&d->arena, PySequence_Fast_GET_ITEM(t, 1));
+        dst->value = string(d, PySequence_Fast_GET_ITEM(t, 1));
         if (dst->kind == START) {
             PyObject *attrs = PySequence_Fast_GET_ITEM(t, 2);
             if (!PyDict_Check(attrs)) {
@@ -414,16 +281,16 @@ static int import_tokens(Document *d, PyObject *tokens) {
                 PyErr_SetString(PyExc_TypeError, "start token attributes must be a dict");
                 goto error;
             }
-            dst->attrs = ds_alloc(&d->arena, sizeof(Attrs));
+            dst->attrs = doc2struct_add_attributes(d);
             if (!dst->attrs) {
                 Py_DECREF(t);
-                native_error(&d->arena);
+                native_error(doc2struct_document_error(d));
                 goto error;
             }
             for (j = 0; j < A_COUNT; j++) {
                 PyObject *v = PyDict_GetItemString(attrs, names[j]);
                 if (v)
-                    dst->attrs->value[j] = string(&d->arena, v);
+                    dst->attrs->value[j] = string(d, v);
             }
         }
         Py_DECREF(t);
@@ -431,18 +298,17 @@ static int import_tokens(Document *d, PyObject *tokens) {
             goto error;
     }
     Py_DECREF(it);
-    return !PyErr_Occurred() && !native_error(&d->arena);
+    return !PyErr_Occurred() && !native_error(doc2struct_document_error(d));
 error:
     Py_DECREF(it);
     return 0;
 }
 static PyObject *normalize(PyObject *self, PyObject *args) {
     PyObject *tokens, *result = NULL;
-    Document d = {0};
+    Document *d = NULL;
     Options options = {0, 0, 100};
     Py_ssize_t cap = 100;
     int ok = 0;
-    void *n;
     if (!PyArg_ParseTuple(args, "O|ppn:normalize", &tokens, &options.hide_hidden_attr,
                           &options.hide_visibility, &cap))
         return NULL;
@@ -451,30 +317,13 @@ static PyObject *normalize(PyObject *self, PyObject *args) {
         return NULL;
     }
     options.max_span = (size_t)cap;
-    if (!import_tokens(&d, tokens))
+    if (!(d=new_document()) || !import_tokens(d, tokens))
         goto done;
-    Py_BEGIN_ALLOW_THREADS n = ds_normalizer(&d, options);
-    if (n) {
-        size_t i;
-        TokenChunk *chunk;
-        ok = 1;
-        for (chunk = d.tokens.first; chunk && ok; chunk = chunk->next) {
-            for (i = 0; i < chunk->used; i++) {
-                Token *t = chunk->data + i;
-                Attrs empty = {0};
-                if (!ds_normalize_token(n, t->kind, t->value, t->attrs ? t->attrs : &empty)) {
-                    ok = 0;
-                    break;
-                }
-            }
-        }
-        if (ok)
-            ok = ds_normalize_finish(n);
-    }
-    Py_END_ALLOW_THREADS if (ok) result = export_runs(&d);
-    else native_error(&d.arena);
+    Py_BEGIN_ALLOW_THREADS ok = doc2struct_normalize(d, options);
+    Py_END_ALLOW_THREADS if (ok) result = export_runs(d);
+    else native_error(doc2struct_document_error(d));
 done:
-    ds_document_free(&d);
+    doc2struct_document_free(d);
     return result;
 }
 static int import_runs(Document *d, PyObject *instructions) {
@@ -484,7 +333,7 @@ static int import_runs(Document *d, PyObject *instructions) {
         return 0;
     for (i = 0; i < PySequence_Fast_GET_SIZE(seq); i++) {
         PyObject *o = PySequence_Fast_GET_ITEM(seq, i), *v;
-        Run *r = ds_push(&d->arena, &d->runs, sizeof(Run));
+        Run *r = doc2struct_add_run(d);
         if (!r)
             goto error;
         r->rowspan = r->colspan = 1;
@@ -504,14 +353,14 @@ static int import_runs(Document *d, PyObject *instructions) {
             SIZE_FIELD(col);
         }
 #undef SIZE_FIELD
-        r->text = string(&d->arena, get(o, "text"));
+        r->text = string(d, get(o, "text"));
         if (!r->text.p && !PyErr_Occurred())
-            r->text = ds_str("");
-        r->href = string(&d->arena, get(o, "href"));
-        r->src = string(&d->arena, get(o, "src"));
+            r->text = str_view("");
+        r->href = string(d, get(o, "href"));
+        r->src = string(d, get(o, "src"));
         v = PyDict_GetItemString(o, "tag");
         if (v)
-            r->tag = string(&d->arena, v);
+            r->tag = string(d, v);
         v = get(o, "flags");
         if (!v)
             goto error;
@@ -536,7 +385,7 @@ static int import_runs(Document *d, PyObject *instructions) {
         if (!v)
             goto error;
         if (v != Py_None && PyObject_IsTrue(v)) {
-            Str span = string(&d->arena, v);
+            Str span = string(d, v);
             char *end;
             unsigned long long rs, cs = 0;
             if (!span.p)
@@ -555,14 +404,14 @@ static int import_runs(Document *d, PyObject *instructions) {
             goto error;
     }
     Py_DECREF(seq);
-    return !native_error(&d->arena);
+    return !native_error(doc2struct_document_error(d));
 error:
     Py_DECREF(seq);
     if (!PyErr_Occurred())
-        native_error(&d->arena);
+        native_error(doc2struct_document_error(d));
     return 0;
 }
-static PyObject *matrix(Matrix *m) {
+static PyObject *matrix(const Matrix *m) {
     PyObject *rows = PyList_New((Py_ssize_t)m->nr);
     size_t i, j;
     if (!rows)
@@ -585,7 +434,7 @@ static PyObject *matrix(Matrix *m) {
     }
     return rows;
 }
-static PyObject *notes(Row *r) {
+static PyObject *notes(const Row *r) {
     PyObject *list;
     size_t i;
     if (!r->nnotes)
@@ -619,9 +468,9 @@ static PyObject *cast(PyObject *value, Str dtype) {
     PyObject *out;
     if (!value || value == Py_None)
         return value;
-    if (ds_is(dtype, "int"))
+    if (str_is(dtype, "int"))
         out = PyUnicode_Check(value) ? PyLong_FromUnicodeObject(value, 10) : PyNumber_Long(value);
-    else if (ds_is(dtype, "bool")) {
+    else if (str_is(dtype, "bool")) {
         int truth = PyObject_IsTrue(value);
         out = truth < 0 ? NULL : PyBool_FromLong(truth);
     } else
@@ -634,46 +483,40 @@ static PyObject *cast(PyObject *value, Str dtype) {
     }
     return out;
 }
-static PyObject *source(Item *it, Str name) {
-    Run *r = &it->run;
-    if (ds_is(name, "href"))
+static PyObject *source(const Run *r, Str name) {
+    if (str_is(name, "href"))
         return unicode(r->href);
-    if (ds_is(name, "src"))
+    if (str_is(name, "src"))
         return unicode(r->src);
-    if (ds_is(name, "font_size"))
+    if (str_is(name, "font_size"))
         return r->has_font
                    ? (r->font_float ? PyFloat_FromDouble(r->font) : PyLong_FromDouble(r->font))
                    : Py_NewRef(Py_None);
-    if (ds_is(name, "indent"))
+    if (str_is(name, "indent"))
         return r->has_indent ? (r->indent_float ? PyFloat_FromDouble(r->indent)
                                                 : PyLong_FromDouble(r->indent))
                              : Py_NewRef(Py_None);
-    if (ds_is(name, "flags"))
+    if (str_is(name, "flags"))
         return PyLong_FromUnsignedLong(r->flags);
     return Py_NewRef(Py_None);
 }
-static PyObject *custom(Document *d, Column *c, Row *r) {
+static PyObject *custom(Document *d, const Column *c, const Row *r) {
     size_t i, j;
-    int all = ds_is(c->which, "all") || ds_is(c->dtype, "list");
+    int all = str_is(c->which, "all") || str_is(c->dtype, "list");
     PyObject *values;
-    if (ds_is(r->type, "table"))
+    if (str_is(r->type, "table"))
         return Py_NewRef(Py_None);
     if (c->filter_types) {
         for (i = 0; i < c->ntypes; i++)
-            if (ds_eq(r->type, c->types[i]))
+            if (str_eq(r->type, c->types[i]))
                 break;
         if (i == c->ntypes)
             return Py_NewRef(Py_None);
     }
-    if (ds_is(c->source, "text")) {
+    if (str_is(c->source, "text")) {
         Str text = r->text;
-        if (c->rx) {
-            if (ds_match(d, c->rx, text, 1))
-                text = ds_group(d, text, c->rx->groups ? 1 : 0);
-            else
-                text = (Str){0};
-            if (native_error(&d->arena))
-                return NULL;
+        if (!doc2struct_column_text(d,c,text,&text)) {
+            native_error(doc2struct_document_error(d));return NULL;
         }
         return cast(unicode(text), c->dtype);
     }
@@ -681,10 +524,11 @@ static PyObject *custom(Document *d, Column *c, Row *r) {
     if (!values)
         return NULL;
     for (i = 0; i < r->nitems; i++) {
-        Vec *links = ds_is(c->source, "href") ? r->items[i].hrefs : NULL;
-        size_t count = links ? links->n : 1;
+        size_t count=0;
+        const Str *links=str_is(c->source,"href")?doc2struct_row_links(r,i,&count):NULL;
+        if(!links)count=1;
         for (j = 0; j < count; j++) {
-            PyObject *v = links ? unicode(((Str *)links->p)[j]) : source(r->items + i, c->source);
+            PyObject *v = links ? unicode(links[j]) : source(doc2struct_row_item(r,i), c->source);
             PyObject *converted;
             if (!v)
                 goto error;
@@ -692,7 +536,7 @@ static PyObject *custom(Document *d, Column *c, Row *r) {
                 Py_DECREF(v);
                 continue;
             }
-            converted = cast(v, ds_is(c->dtype, "list") ? ds_str("str") : c->dtype);
+            converted = cast(v, str_is(c->dtype, "list") ? str_view("str") : c->dtype);
             if (!converted)
                 goto error;
             if (PyList_Append(values, converted) < 0) {
@@ -707,7 +551,7 @@ static PyObject *custom(Document *d, Column *c, Row *r) {
     {
         Py_ssize_t n = PyList_GET_SIZE(values);
         PyObject *result =
-            n ? Py_NewRef(PyList_GET_ITEM(values, ds_is(c->which, "first") ? 0 : n - 1))
+            n ? Py_NewRef(PyList_GET_ITEM(values, str_is(c->which, "first") ? 0 : n - 1))
               : Py_NewRef(Py_None);
         Py_DECREF(values);
         return result;
@@ -724,7 +568,7 @@ static int set_key(PyObject *dict, PyObject *key, PyObject *value) {
     Py_DECREF(value);
     return result == 0;
 }
-static PyObject *cleanup_info(Row *row) {
+static PyObject *cleanup_info(const Row *row) {
     PyObject *list;
     size_t i;
     if (row->cleaned < 0)
@@ -732,9 +576,9 @@ static PyObject *cleanup_info(Row *row) {
     list = PyList_New(0);
     if (!list)
         return NULL;
-    for (i = 0; ds_cleanup_names[i]; i++)
+    for (i = 0; doc2struct_cleanup_name(i); i++)
         if (row->cleaned & (1u << i)) {
-            PyObject *name = PyUnicode_FromString(ds_cleanup_names[i]);
+            PyObject *name = PyUnicode_FromString(doc2struct_cleanup_name(i));
             if (!name || PyList_Append(list, name) < 0) {
                 Py_XDECREF(name);
                 Py_DECREF(list);
@@ -745,7 +589,10 @@ static PyObject *cleanup_info(Row *row) {
     return list;
 }
 static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
-    PyObject *list = PyList_New((Py_ssize_t)d->rows.n);
+    size_t nrows,ncolumns;
+    const Row *rows=doc2struct_document_rows(d,&nrows);
+    const Column *columns=doc2struct_rules_columns(r,&ncolumns);
+    PyObject *list = PyList_New((Py_ssize_t)nrows);
     static const char *names[] = {"id",       "level",  "type",    "class",    "standardized_title",
                                   "text",     "matrix", "cleaned", "preamble", "footnotes",
                                   "postamble"};
@@ -764,13 +611,13 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
         if (!types[i])
             goto error;
     }
-    for (i = 0; i < d->rows.n; i++) {
-        Row *row = (Row *)d->rows.p + i;
+    for (i = 0; i < nrows; i++) {
+        const Row *row = rows + i;
         PyObject *out = PyDict_New(), *type = NULL;
         if (!out)
             goto error;
         for (k = 0; k < 5; k++)
-            if (ds_is(row->type, type_names[k]))
+            if (str_is(row->type, type_names[k]))
                 break;
         type = k < 5 ? Py_NewRef(types[k]) : unicode(row->type);
         if (!type) {
@@ -782,7 +629,7 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
             !set_key(out, keys[2], Py_NewRef(type)) ||
             (with_rules &&
              (!set_key(out, keys[3],
-                       ds_eq(row->klass, row->type) ? Py_NewRef(type) : unicode(row->klass)) ||
+                       str_eq(row->klass, row->type) ? Py_NewRef(type) : unicode(row->klass)) ||
               !set_key(out, keys[4], unicode(row->title)))) ||
             !set_key(out, keys[5], unicode(row->text)) ||
             !set_key(out, keys[6], row->matrix.nr ? matrix(&row->matrix) : Py_NewRef(Py_None)) ||
@@ -794,13 +641,13 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
             goto error;
         }
         Py_DECREF(type);
-        for (j = 0; j < r->ncolumns; j++) {
-            PyObject *key = unicode(r->columns[j].name), *value;
+        for (j = 0; j < ncolumns; j++) {
+            PyObject *key = unicode(columns[j].name), *value;
             if (!key) {
                 Py_DECREF(out);
                 goto error;
             }
-            value = custom(d, r->columns + j, row);
+            value = custom(d, columns + j, row);
             if (!value) {
                 Py_DECREF(key);
                 Py_DECREF(out);
@@ -832,7 +679,7 @@ error:
 }
 static PyObject *standardize(PyObject *self, PyObject *args) {
     PyObject *instructions, *capsule, *result = NULL;
-    Document d = {0};
+    Document *d = NULL;
     Rules *r;
     int with_rules, ok;
     if (!PyArg_ParseTuple(args, "OOp:standardize", &instructions, &capsule, &with_rules))
@@ -840,17 +687,17 @@ static PyObject *standardize(PyObject *self, PyObject *args) {
     r = PyCapsule_GetPointer(capsule, "doc2struct.Rules");
     if (!r)
         return NULL;
-    if (!import_runs(&d, instructions))
+    if (!(d=new_document()) || !import_runs(d, instructions))
         goto done;
-    Py_BEGIN_ALLOW_THREADS ok = ds_standardize(&d, r);
-    Py_END_ALLOW_THREADS if (ok) result = export_rows(&d, r, with_rules);
-    else native_error(&d.arena);
+    Py_BEGIN_ALLOW_THREADS ok = doc2struct_standardize(d, r);
+    Py_END_ALLOW_THREADS if (ok) result = export_rows(d, r, with_rules);
+    else native_error(doc2struct_document_error(d));
 done:
-    ds_document_free(&d);
+    doc2struct_document_free(d);
     return result;
 }
 typedef struct {
-    ParserContext context;
+    doc2struct_parser *context;
     int busy, closed;
 } NativeParser;
 
@@ -864,7 +711,7 @@ static void parser_free(PyObject *capsule) {
         PyErr_Clear();
         return;
     }
-    ds_parser_clear(&parser->context);
+    doc2struct_parser_free(parser->context);
     free(parser);
 }
 
@@ -874,10 +721,12 @@ static PyObject *create_parser(size_t cache_size) {
     parser = calloc(1, sizeof(*parser));
     if (!parser)
         return PyErr_NoMemory();
-    ds_parser_init(&parser->context, cache_size);
+    parser->context=doc2struct_parser_new(cache_size,NULL);
+    if(!parser->context){free(parser);return PyErr_NoMemory();}
     capsule = PyCapsule_New(parser, "doc2struct.Parser", parser_free);
-    if (!capsule)
-        free(parser);
+    if (!capsule) {
+        doc2struct_parser_free(parser->context);free(parser);
+    }
     return capsule;
 }
 
@@ -905,7 +754,7 @@ static PyObject *parser_clear(PyObject *self, PyObject *capsule) {
     NativeParser *parser = idle_parser(capsule);
     if (!parser)
         return NULL;
-    ds_parser_clear(&parser->context);
+    doc2struct_parser_clear(parser->context);
     Py_RETURN_NONE;
 }
 
@@ -914,8 +763,7 @@ static PyObject *parser_close(PyObject *self, PyObject *capsule) {
     if (!parser)
         return NULL;
     parser->closed = 1;
-    parser->context.pool.limit = 0;
-    ds_parser_clear(&parser->context);
+    doc2struct_parser_close(parser->context);
     Py_RETURN_NONE;
 }
 
@@ -923,8 +771,8 @@ static PyObject *parser_info(PyObject *self, PyObject *capsule) {
     NativeParser *parser = idle_parser(capsule);
     if (!parser)
         return NULL;
-    return Py_BuildValue("(KKO)", (unsigned long long)parser->context.pool.limit,
-                         (unsigned long long)parser->context.pool.bytes,
+    return Py_BuildValue("(KKO)", (unsigned long long)doc2struct_parser_cache_limit(parser->context),
+                         (unsigned long long)doc2struct_parser_cached_bytes(parser->context),
                          parser->closed ? Py_True : Py_False);
 }
 
@@ -948,7 +796,7 @@ static PyObject *default_parser_info(PyObject *self, PyObject *unused) {
 }
 
 typedef struct {
-    Document document;
+    Document *document;
     Rules *rules;
     PyObject *source, *rules_owner, *parser_owner;
     int with_rules;
@@ -965,9 +813,9 @@ static void native_document_free(PyObject *capsule) {
         if (!parser)
             PyErr_Clear();
         if (!parser || parser->busy || parser->closed)
-            native->document.arena.pool = NULL;
+            doc2struct_document_detach_cache(native->document);
     }
-    ds_document_free(&native->document);
+    doc2struct_document_free(native->document);
     Py_XDECREF(native->source);
     Py_XDECREF(native->rules_owner);
     Py_XDECREF(native->parser_owner);
@@ -978,31 +826,26 @@ static PyObject *native_rows(PyObject *self, PyObject *capsule) {
     NativeDocument *native = PyCapsule_GetPointer(capsule, "doc2struct.NativeDocument");
     if (!native)
         return NULL;
-    return export_rows(&native->document, native->rules, native->with_rules);
+    return export_rows(native->document, native->rules, native->with_rules);
 }
 
 static PyObject *native_len(PyObject *self, PyObject *capsule) {
     NativeDocument *native = PyCapsule_GetPointer(capsule, "doc2struct.NativeDocument");
-    return native ? PyLong_FromSize_t(native->document.rows.n) : NULL;
+    size_t count;
+    if(!native)return NULL;
+    doc2struct_document_rows(native->document,&count);return PyLong_FromSize_t(count);
 }
 
 static PyObject *native_json(PyObject *self, PyObject *capsule) {
     NativeDocument *native = PyCapsule_GetPointer(capsule, "doc2struct.NativeDocument");
-    Arena arena = {0};
-    Str json;
-    PyObject *result = NULL;
-    if (!native)
-        return NULL;
-    if (native->rules->ncolumns) {
-        PyErr_SetString(PyExc_ValueError,
-                        "experimental native JSON does not support custom columns yet");
-        return NULL;
-    }
-    Py_BEGIN_ALLOW_THREADS json = ds_json(&native->document, native->with_rules, &arena);
-    Py_END_ALLOW_THREADS if (json.p) result = PyBytes_FromStringAndSize(json.p, (Py_ssize_t)json.n);
-    else native_error(&arena);
-    ds_arena_free(&arena);
-    return result;
+    doc2struct_error error;size_t size;char *json;PyObject *result=NULL;
+    if(!native)return NULL;
+    Py_BEGIN_ALLOW_THREADS
+    json=doc2struct_document_json(native->document,native->rules,native->with_rules,&size,&error);
+    Py_END_ALLOW_THREADS
+    if(json)result=PyBytes_FromStringAndSize(json,(Py_ssize_t)size);
+    else native_error(error.message);
+    doc2struct_buffer_free(json);return result;
 }
 
 static PyObject *native_columns(PyObject *self, PyObject *capsule) {
@@ -1011,21 +854,24 @@ static PyObject *native_columns(PyObject *self, PyObject *capsule) {
                                   "postamble"};
     NativeDocument *native = PyCapsule_GetPointer(capsule, "doc2struct.NativeDocument");
     PyObject *columns, *lists[11] = {0};
-    size_t i, j;
+    size_t i, j, nrows, ncolumns;
+    const Row *rows;const Column *definitions;
     if (!native)
         return NULL;
+    rows=doc2struct_document_rows(native->document,&nrows);
+    definitions=doc2struct_rules_columns(native->rules,&ncolumns);
     columns = PyDict_New();
     if (!columns)
         return NULL;
     for (j = 0; j < 11; j++) {
         if (!native->with_rules && (j == 3 || j == 4))
             continue;
-        lists[j] = PyList_New((Py_ssize_t)native->document.rows.n);
+        lists[j] = PyList_New((Py_ssize_t)nrows);
         if (!lists[j] || PyDict_SetItemString(columns, names[j], lists[j]) < 0)
             goto error;
     }
-    for (i = 0; i < native->document.rows.n; i++) {
-        Row *r = (Row *)native->document.rows.p + i;
+    for (i = 0; i < nrows; i++) {
+        const Row *r = rows + i;
         PyObject *values[11];
         values[0] = PyLong_FromSize_t(r->id);
         values[1] = PyLong_FromSize_t(r->level);
@@ -1052,16 +898,16 @@ static PyObject *native_columns(PyObject *self, PyObject *capsule) {
             if (lists[j])
                 PyList_SET_ITEM(lists[j], (Py_ssize_t)i, values[j]);
     }
-    for (j = 0; j < native->rules->ncolumns; j++) {
-        Column *c = native->rules->columns + j;
-        PyObject *key = unicode(c->name), *values = PyList_New((Py_ssize_t)native->document.rows.n);
+    for (j = 0; j < ncolumns; j++) {
+        const Column *c = definitions + j;
+        PyObject *key = unicode(c->name), *values = PyList_New((Py_ssize_t)nrows);
         if (!key || !values) {
             Py_XDECREF(key);
             Py_XDECREF(values);
             goto error;
         }
-        for (i = 0; i < native->document.rows.n; i++) {
-            PyObject *value = custom(&native->document, c, (Row *)native->document.rows.p + i);
+        for (i = 0; i < nrows; i++) {
+            PyObject *value = custom(native->document, c, rows + i);
             if (!value) {
                 Py_DECREF(key);
                 Py_DECREF(values);
@@ -1090,7 +936,8 @@ error:
 static PyObject *parse_html_impl(PyObject *self, PyObject *args, int keep_native) {
     PyObject *html, *capsule, *owner = NULL, *result = NULL, *parser_capsule = Py_None;
     Rules *r;
-    Document local = {0}, *document = &local;
+    Document *document = NULL;
+    doc2struct_error error;
     NativeDocument *native = NULL;
     NativeParser *parser = NULL;
     Options options = {0, 0, 100};
@@ -1133,16 +980,16 @@ static PyObject *parse_html_impl(PyObject *self, PyObject *args, int keep_native
         native = calloc(1, sizeof(*native));
         if (!native)
             return PyErr_NoMemory();
-        document = &native->document;
     }
     if (!input(html, &text, &owner))
         goto done;
     if (parser)
         parser->busy = 1;
-    Py_BEGIN_ALLOW_THREADS ok = parser
-                                    ? ds_parser_parse(&parser->context, document, text, r, options)
-                                    : ds_parse(document, text, r, options);
+    Py_BEGIN_ALLOW_THREADS
+    document=doc2struct_parse(parser?parser->context:NULL,text,r,options,&error);
+    ok=document!=NULL;
     Py_END_ALLOW_THREADS if (ok && keep_native) {
+        native->document=document;
         native->rules = r;
         native->with_rules = with_rules;
         native->source = owner ? owner : Py_NewRef(html);
@@ -1157,9 +1004,9 @@ static PyObject *parse_html_impl(PyObject *self, PyObject *args, int keep_native
         }
     }
     else if (ok) result = export_rows(document, r, with_rules);
-    else native_error(&document->arena);
+    else native_error(error.message);
 done:
-    ds_document_free(document);
+    doc2struct_document_free(document);
     if (parser)
         parser->busy = 0;
     if (native) {
@@ -1178,6 +1025,11 @@ static PyObject *parse_native(PyObject *self, PyObject *args) {
     return parse_html_impl(self, args, 1);
 }
 static PyMethodDef methods[] = {
+    {"merge_rules",merge_rules,METH_VARARGS,"Extend rules using native merge semantics."},
+    {"prepare_preset",prepare_preset,METH_O,"Compile a bundled preset in C."},
+    {"defaults_json",defaults_json,METH_NOARGS,"Return canonical defaults."},
+    {"preset_packs",preset_packs,METH_NOARGS,"Return embedded preset packs."},
+    {"resolve_rules",resolve_rules,METH_VARARGS,"Resolve configuration using C defaults."},
     {"clear_parser_cache", clear_parser_cache, METH_NOARGS,
      "Release default parser scratch blocks."},
     {"default_parser_info", default_parser_info, METH_NOARGS, "Return default parser cache state."},

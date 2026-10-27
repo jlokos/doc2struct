@@ -1,3 +1,0 @@
-recursive-include c *.c *.h *.py *.md *.txt
-recursive-include doc2struct/rules/presets *.json
-include build_support.py PERFORMANCE.md

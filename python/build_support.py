@@ -33,7 +33,6 @@ class BuildNative(build_ext):
                 raise OptionError('--pgo-training must contain .htm or .html files')
 
     def run(self):
-        runpy.run_path('c/generate_tables.py')['generate']('c/unicode_data.h')
         super().run()
 
     def get_ext_fullpath(self, name):
@@ -107,10 +106,8 @@ def train(binary, directory, rules, compiler_bin):
         native = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = native
         spec.loader.exec_module(native)
-        from doc2struct.rules import load_rules
-
-        definition = load_rules(rules).to_dict()
-        prepared = native.prepare_rules(definition)
+        definition = json.loads(native.resolve_rules(rules, True))
+        prepared = native.prepare_preset(rules)
         inputs = [(p, p.read_bytes()) for p in html_files(directory)]
         if not inputs:
             raise ValueError('PGO training directory contains no HTML files')

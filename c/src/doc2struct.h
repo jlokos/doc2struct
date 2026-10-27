@@ -1,14 +1,12 @@
 #ifndef DOC2STRUCT_H
 #define DOC2STRUCT_H
+#include <doc2struct/doc2struct.h>
 #include <stddef.h>
 #include <stdint.h>
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include "pcre2.h"
 
-typedef struct {
-    const char *p;
-    size_t n;
-} Str;
+typedef doc2struct_string Str;
 typedef struct Block Block;
 /* Single-owner optional block cache. Retire attached arenas before the pool. */
 typedef struct {
@@ -16,8 +14,9 @@ typedef struct {
     size_t bytes, limit;
 } ArenaPool;
 
-typedef struct {
+typedef struct doc2struct_parser {
     ArenaPool pool;
+    int closed;
 } ParserContext;
 
 #define DS_DEFAULT_CACHE_SIZE ((size_t)8 * 1024 * 1024)
@@ -39,16 +38,13 @@ typedef struct {
     void *p;
     size_t n, cap;
 } Vec;
-typedef struct {
+typedef struct doc2struct_style {
     unsigned flags, clear_flags;
     double font, indent;
     int has_font, has_indent, display_none, vis_hidden;
 } Style;
 enum { A_STYLE, A_COLSPAN, A_ROWSPAN, A_HREF, A_SRC, A_ALT, A_HIDDEN, A_COUNT };
-typedef struct {
-    Str value[A_COUNT];
-    Style *prepared_style;
-} Attrs;
+typedef doc2struct_attributes Attrs;
 enum { TEXT, START, END };
 enum {
     BOLD = 1,
@@ -59,18 +55,8 @@ enum {
     PROPER_CASE = 32,
     FAKE_TABLE = 64
 };
-typedef struct {
-    size_t block, line, row, col, rowspan, colspan;
-    Str text, href, tag, src;
-    unsigned flags;
-    double font, indent;
-    int in_table, has_font, has_indent, font_float, indent_float;
-} Run;
-typedef struct {
-    int kind;
-    Str value;
-    Attrs *attrs;
-} Token;
+typedef doc2struct_run Run;
+typedef doc2struct_token Token;
 
 #define DS_TOKEN_CHUNK_SIZE 4096
 typedef struct TokenChunk {
@@ -83,15 +69,12 @@ typedef struct {
     TokenChunk *first, *last;
     size_t n;
 } TokenBuffer;
-typedef struct {
-    int hide_hidden_attr, hide_visibility;
-    size_t max_span;
-} Options;
-typedef struct Regex {
+typedef doc2struct_options Options;
+typedef struct doc2struct_regex {
     pcre2_code *code;
     unsigned groups;
     unsigned first_ascii, first_digit, caseless;
-    struct Regex *next;
+    struct doc2struct_regex *next;
 } Regex;
 typedef struct {
     Str name;
@@ -104,14 +87,8 @@ typedef struct {
     Regex *rx;
     int needs_href;
 } Remove;
-typedef struct {
-    Str name, source, dtype, which;
-    Str *types;
-    size_t ntypes;
-    int filter_types;
-    Regex *rx;
-} Column;
-typedef struct {
+typedef doc2struct_column Column;
+typedef struct doc2struct_rules {
     Arena arena;
     Regex *regexes;
     Header *headers;
@@ -127,15 +104,12 @@ typedef struct {
     Regex *footnote;
     int collect_hrefs;
 } Rules;
-typedef struct {
+typedef struct doc2struct_item {
     Run run;
     int fake_table;
     Vec *hrefs;
 } Item;
-typedef struct {
-    Str *cells;
-    size_t nr, nc;
-} Matrix;
+typedef doc2struct_matrix Matrix;
 typedef struct {
     Item *items;
     size_t nitems;
@@ -155,9 +129,7 @@ typedef struct ListLines {
     Line *lines;
     size_t n;
 } ListLines;
-typedef struct {
-    Str id, text;
-} Note;
+typedef doc2struct_note Note;
 
 enum {
     DS_TRIMMED_CELLS = 1u << 0,
@@ -173,17 +145,8 @@ enum {
     DS_TABLE_ATTACHMENT = 1u << 10
 };
 extern const char *ds_cleanup_names[];
-typedef struct {
-    size_t id, level;
-    Str type, klass, title, text, preamble, postamble;
-    Matrix matrix;
-    int cleaned, removed; /* cleaned: -1 outside tables, otherwise cleanup-info bits */
-    Item *items;
-    size_t nitems;
-    Note *notes;
-    size_t nnotes;
-} Row;
-typedef struct {
+typedef doc2struct_row Row;
+typedef struct doc2struct_document {
     Arena arena;
     Vec runs, rows, lines;
     void *flow;

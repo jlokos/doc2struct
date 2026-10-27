@@ -11,7 +11,7 @@ try:
 except ImportError as exc:
     raise ImportError(
         'doc2struct requires its C extension. Build it with '
-        '`python -m pip install -e .` or `python setup.py build_ext --inplace`.'
+        '`python -m pip install -e ./python` from the repository root.'
     ) from exc
 
 from .rules import Rules, load_rules, list_namespaces
@@ -19,17 +19,17 @@ from .rules import Rules, load_rules, list_namespaces
 
 @lru_cache(maxsize=128)
 def _compile(serialized):
-    return _native.prepare_rules(json.loads(serialized))
+    return _native.prepare_rules(serialized)
 
 
 @lru_cache(maxsize=128)
 def _preset(source):
-    return _compile(json.dumps(load_rules(source).to_dict(), ensure_ascii=False))
+    return _native.prepare_preset(source)
 
 
 @lru_cache(maxsize=1)
 def _default():
-    return _compile(json.dumps(Rules().to_dict(), ensure_ascii=False))
+    return _native.prepare_preset(None)
 
 
 def prepare(rules):

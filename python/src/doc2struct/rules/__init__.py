@@ -6,39 +6,34 @@ rules - every judgment the pipeline makes, as data.
     rules = load_rules('SEC:10-K', extend={...})       # a bundled document type plus extra rules
     rules = load_rules({...})                          # a dict
 
-A rule pack (rules/presets/*.json) is one file for a family of documents:
+A rule pack (presets/*.json) is one file for a family of documents:
 
     {"namespace": "SEC",
      "rule_sets": {"10k": {"headers": [...]}, ...},     # named rule sets; anything a Rules dict can hold
      "document_types": {"10-K": "10k", "10-K/A": "10k", ...}} # document type -> rule set
 
-Document types match case-insensitively. A rule set lists only what differs from the defaults (rules/defaults.py).
+Document types match case-insensitively. A rule set lists only what differs from the defaults (presets/defaults.json).
 Stage code contains no rule data.
 """
 import json
 from pathlib import Path
 from typing import Optional, Union
 
+from .. import _native
+
 from .types import (CustomColumn, HeaderRule, NormalizerOptions, RemoveRules, Rules, TableRules)
 
-PRESET_DIR = Path(__file__).parent / 'presets'
 _PACKS = None
 
 
 def _packs() -> dict:
-    """{NAMESPACE: pack dict}, read once from rules/presets/*.json"""
+    """{NAMESPACE: pack dict}, read once from presets/*.json"""
     global _PACKS
     if _PACKS is None:
         _PACKS = {}
-        for p in sorted(PRESET_DIR.glob('*.json')):
-            with open(p, encoding='utf-8') as f:
-                pack = json.load(f)
+        for raw in _native.preset_packs():
+            pack = json.loads(raw)
             ns = pack['namespace'].upper()
-            if ns in _PACKS:
-                raise ValueError(f'namespace {ns!r} is defined by more than one file in {PRESET_DIR}')
-            missing = sorted({s for s in pack['document_types'].values() if s not in pack['rule_sets']})
-            if missing:
-                raise ValueError(f'{p.name}: document types point at unknown rule sets {missing}')
             pack['_document_types_upper'] = {k.upper(): v for k, v in pack['document_types'].items()}
             _PACKS[ns] = pack
     return _PACKS
@@ -60,9 +55,9 @@ def _from_pack(namespace: str, document_type: str) -> Rules:
     set_name = pack['_document_types_upper'].get(document_type.strip().upper())
     if set_name is None:
         raise KeyError(f'no document type {document_type!r} in {namespace.upper()}; known document types: {list_document_types(namespace)}')
-    d = dict(pack['rule_sets'][set_name])
-    d['name'] = f'{namespace.upper()}:{document_type.strip().upper()}'
-    return Rules.from_dict(d)
+    name = f'{namespace.upper()}:{document_type.strip().upper()}'
+    return Rules.from_dict(json.loads(_native.resolve_rules(name, True)))
+
 
 
 def _read(source) -> dict:
@@ -83,15 +78,14 @@ def _resolve(source) -> Rules:
         ns, document_type = source.split(':', 1)
         if ns.strip().upper() in _packs():
             return _from_pack(ns.strip(), document_type)
-    return Rules.from_dict(_read(source))
+    return Rules.from_dict(json.loads(_native.resolve_rules(
+        json.dumps(_read(source), ensure_ascii=False, allow_nan=False), False)))
 
 
 def merge(base: Rules, extra: Rules) -> Rules:
     """extra's headers and columns are appended; extra's remove/tables replace base's when they are not default."""
-    remove = extra.remove if extra.remove != RemoveRules() else base.remove
-    tables = extra.tables if extra.tables != TableRules() else base.tables
-    return Rules(name=f'{base.name}+{extra.name}', headers=base.headers + extra.headers, remove=remove,
-                 tables=tables, columns=base.columns + extra.columns).validate()
+    return Rules.from_dict(json.loads(_native.merge_rules(
+        json.dumps(base.to_dict(), allow_nan=False), json.dumps(extra.to_dict(), allow_nan=False))))
 
 
 def load_rules(source: Union[str, Path, dict, Rules], extend: Optional[Union[str, Path, dict, Rules]] = None) -> Rules:

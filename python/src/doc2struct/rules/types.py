@@ -1,13 +1,15 @@
 """types.py - rule types. Plain data, no stage logic. Every type converts to and from JSON-able dicts."""
 from __future__ import annotations
 
-import re
+import json
+from .. import _native
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 from .defaults import (DEFAULT_FOOTNOTE_LINES, DEFAULT_FOOTNOTE_REGEX, DEFAULT_POSTAMBLE_LINES,
                        DEFAULT_PREAMBLE_LINES, DEFAULT_REPEAT_THRESHOLD, KNOWN_STYLES, KNOWN_TABLE_STEPS,
-                       RESERVED_COLUMNS, STANDARD_REMOVE)
+                       RESERVED_COLUMNS, STANDARD_REMOVE, DEFAULT_SINGLE_ROW_TO_TEXT,
+                       DEFAULT_TITLE_FROM_SECTION, DEFAULT_UNWRAP_LAYOUT)
 
 
 # -------------------------------------------------------------------------------------------- normalizer
@@ -63,13 +65,13 @@ class HeaderRule:
 @dataclass(frozen=True)
 class TableRules:
     steps: Tuple[str, ...] = KNOWN_TABLE_STEPS
-    single_row_to_text: bool = True        # a cleaned table with one row becomes text
-    title_from_section: bool = True        # a section with exactly one table gives it its title (a copy)
+    single_row_to_text: bool = DEFAULT_SINGLE_ROW_TO_TEXT  # a cleaned table with one row becomes text
+    title_from_section: bool = DEFAULT_TITLE_FROM_SECTION  # a section with exactly one table gives it its title
     footnote_regex: Optional[str] = DEFAULT_FOOTNOTE_REGEX   # marker at the start of a footnote; None = off
     footnote_lines: int = DEFAULT_FOOTNOTE_LINES              # continuation lines per footnote
     preamble_lines: int = DEFAULT_PREAMBLE_LINES              # 0 = off
     postamble_lines: int = DEFAULT_POSTAMBLE_LINES            # 0 = off
-    unwrap_layout: bool = False          # unwrap prose tables containing explicit section headings
+    unwrap_layout: bool = DEFAULT_UNWRAP_LAYOUT  # unwrap prose tables containing explicit section headings
 
     def to_dict(self):
         return {'steps': list(self.steps), 'single_row_to_text': self.single_row_to_text,
@@ -122,31 +124,7 @@ class Rules:
     columns: List[CustomColumn] = field(default_factory=list)
 
     def validate(self):
-        for h in self.headers:
-            re.compile(h.regex)
-            bad = [s for s in h.requires if s not in KNOWN_STYLES]
-            if bad:
-                raise ValueError(f'header rule {h.name!r}: unknown style(s) {bad}; known: {KNOWN_STYLES}')
-        if self.tables.footnote_regex:
-            re.compile(self.tables.footnote_regex)
-        bad = [s for s in self.tables.steps if s not in KNOWN_TABLE_STEPS]
-        if bad:
-            raise ValueError(f'unknown table step(s) {bad}; known: {KNOWN_TABLE_STEPS}')
-        names = [c.name for c in self.columns]
-        for n in names:
-            if n in RESERVED_COLUMNS:
-                raise ValueError(f'custom column {n!r} reuses a default column name')
-        if len(set(names)) != len(names):
-            raise ValueError('duplicate custom column name')
-        for c in self.columns:
-            if c.source not in ('text', 'href', 'src', 'font_size', 'indent', 'flags'):
-                raise ValueError(f'custom column {c.name!r}: unknown source {c.source!r}')
-            if c.which not in ('first', 'last', 'all'):
-                raise ValueError(f'custom column {c.name!r}: which must be first, last or all')
-            if c.dtype not in ('str', 'int', 'bool', 'list'):
-                raise ValueError(f'custom column {c.name!r}: unknown dtype {c.dtype!r}')
-            if c.pattern:
-                re.compile(c.pattern)
+        _native.prepare_rules(json.dumps(self.to_dict(), ensure_ascii=False, allow_nan=False))
         return self
 
     def to_dict(self):
