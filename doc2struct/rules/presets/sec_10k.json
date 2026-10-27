@@ -1,8 +1,0 @@
-{
-  "name": "sec_10k",
-  "headers": [
-    {"name": "part", "regex": "^part\\s*([ivx]+)$", "level": 0},
-    {"name": "signatures", "regex": "^signatures?\\.*$", "level": 0},
-    {"name": "item", "regex": "^item\\s*(\\d+)\\.?([a-z])?(?![a-z])", "level": 1}
-  ]
-}

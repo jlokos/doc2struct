@@ -1,0 +1,566 @@
+{
+  "namespace": "SEC",
+  "rule_sets": {
+    "1kpartii": {
+      "headers": [
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+)",
+          "level": 0
+        }
+      ]
+    },
+    "1u": {
+      "headers": [
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+)",
+          "level": 0
+        },
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        }
+      ]
+    },
+    "10k": {
+      "headers": [
+        {
+          "name": "part",
+          "regex": "^part\\s*([ivx]+)$",
+          "level": 0
+        },
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        },
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+)\\.?([a-z])?(?![a-z])",
+          "level": 1
+        }
+      ]
+    },
+    "20f": {
+      "headers": [
+        {
+          "name": "part",
+          "regex": "^part\\s*([ivx]+)",
+          "level": 0
+        },
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        },
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+)\\.?([a-z])?(?![a-z])",
+          "level": 1
+        },
+        {
+          "name": "letter",
+          "regex": "\\d*\\.?([a-z])",
+          "level": 2
+        }
+      ]
+    },
+    "8k": {
+      "headers": [
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        },
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+(?:\\.\\d+)?)",
+          "level": 0
+        }
+      ]
+    },
+    "abs15g": {
+      "headers": [
+        {
+          "name": "part",
+          "regex": "^part\\s*([ivx]+)",
+          "level": 0
+        },
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        },
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+\\.\\d+)",
+          "level": 1
+        }
+      ]
+    },
+    "absee": {
+      "headers": [
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+)",
+          "level": 0
+        },
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        }
+      ]
+    },
+    "appntc": {
+      "headers": [
+        {
+          "name": "agency",
+          "regex": "^agency",
+          "level": 0
+        },
+        {
+          "name": "action",
+          "regex": "^action",
+          "level": 0
+        },
+        {
+          "name": "summary",
+          "regex": "^summary of application",
+          "level": 0
+        },
+        {
+          "name": "applicants",
+          "regex": "^applicants",
+          "level": 0
+        },
+        {
+          "name": "filing",
+          "regex": "^filing dates",
+          "level": 0
+        },
+        {
+          "name": "hearing",
+          "regex": "^hearing or notification of hearing",
+          "level": 0
+        },
+        {
+          "name": "addresses",
+          "regex": "^addresses",
+          "level": 0
+        },
+        {
+          "name": "further contact",
+          "regex": "^for further information contact",
+          "level": 0
+        },
+        {
+          "name": "supplementary information",
+          "regex": "^supplementary information",
+          "level": 0
+        }
+      ]
+    },
+    "cb": {
+      "headers": [
+        {
+          "name": "part",
+          "regex": "^part\\s*([ivx]+)",
+          "level": 0
+        },
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+)",
+          "level": 1
+        }
+      ]
+    },
+    "n18f1": {
+      "headers": [
+        {
+          "name": "notification of election",
+          "regex": "^notification of election",
+          "level": 0
+        },
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        }
+      ]
+    },
+    "ncsrs": {
+      "headers": [
+        {
+          "name": "item",
+          "regex": "^(\\d+)",
+          "level": 0
+        },
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        }
+      ]
+    },
+    "nt10k": {
+      "headers": [
+        {
+          "name": "part",
+          "regex": "^part\\s*([ivx]+)",
+          "level": 0
+        }
+      ]
+    },
+    "ex99cert": {
+      "headers": [
+        {
+          "name": "item",
+          "regex": "^(\\d+)",
+          "level": 0
+        },
+        {
+          "name": "letter",
+          "regex": "^\\(?([a-z])",
+          "level": 1
+        }
+      ]
+    },
+    "sc13e3": {
+      "headers": [
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+)",
+          "level": 0
+        },
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        },
+        {
+          "name": "letter",
+          "regex": "^\\(?([a-z])",
+          "level": 1
+        }
+      ]
+    },
+    "sc14d9": {
+      "headers": [
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+)",
+          "level": 0
+        },
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        },
+        {
+          "name": "annex",
+          "regex": "^annex",
+          "level": 0
+        }
+      ]
+    },
+    "sd": {
+      "headers": [
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        },
+        {
+          "name": "item",
+          "regex": "^item\\s*(\\d+\\.\\d+)",
+          "level": 0
+        }
+      ]
+    },
+    "s1": {
+      "headers": [
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        },
+        {
+          "name": "mda",
+          "regex": "^management.?s\\s+discussion",
+          "level": 0
+        },
+        {
+          "name": "risk factors",
+          "regex": "^risk\\s+factors",
+          "level": 0
+        },
+        {
+          "name": "executive compensation",
+          "regex": "^executive\\s+compensation",
+          "level": 0
+        },
+        {
+          "name": "underwriting",
+          "regex": "^underwriting",
+          "level": 0
+        },
+        {
+          "name": "legal matters",
+          "regex": "^legal\\s+matters",
+          "level": 0
+        },
+        {
+          "name": "prospectus summary",
+          "regex": "^prospectus\\s+summary",
+          "level": 0
+        },
+        {
+          "name": "use of proceeds",
+          "regex": "^use\\s+of\\s+proceeds",
+          "level": 0
+        },
+        {
+          "name": "forward looking statements",
+          "regex": "forward-?\\s+looking\\s+statements",
+          "level": 0
+        },
+        {
+          "name": "dividend policy",
+          "regex": "^dividend\\s+policy",
+          "level": 0
+        },
+        {
+          "name": "capitalization",
+          "regex": "^capitalization",
+          "level": 0
+        },
+        {
+          "name": "business",
+          "regex": "^business",
+          "level": 0
+        },
+        {
+          "name": "management",
+          "regex": "^management\\s+$",
+          "level": 0
+        },
+        {
+          "name": "certain relationships",
+          "regex": "^certain\\s+relationships",
+          "level": 0
+        },
+        {
+          "name": "principal stockholders",
+          "regex": "^principal\\b.*?\\bstockholders\\b",
+          "level": 0
+        },
+        {
+          "name": "description of capital stock",
+          "regex": "^description\\s+of\\s+capital\\s+stock",
+          "level": 0
+        },
+        {
+          "name": "shares eligible for future sale",
+          "regex": "^shares\\s+eligible\\s+for\\s+future\\s+sale",
+          "level": 0
+        },
+        {
+          "name": "federal income tax considerations for non us holders",
+          "regex": "^material\\s+u\\.s\\.\\s+federal\\s+income\\s+tax\\s+considerations\\s+for\\s+non-u\\.s\\.\\s+holders",
+          "level": 0
+        },
+        {
+          "name": "where you can find more information",
+          "regex": "^where\\s+you\\s+can\\s+find\\s+more\\s+information",
+          "level": 0
+        },
+        {
+          "name": "index to financial statements",
+          "regex": "^index\\b.*?\\bfinancial\\s+statements",
+          "level": 0
+        },
+        {
+          "name": "dilution",
+          "regex": "^dilution",
+          "level": 0
+        },
+        {
+          "name": "selling security holders",
+          "regex": "^selling\\s+security\\s+holders",
+          "level": 0
+        },
+        {
+          "name": "plan of distribution",
+          "regex": "^plan\\s+of\\s+distribution",
+          "level": 0
+        },
+        {
+          "name": "legal proceedings",
+          "regex": "^legal\\s+proceedings",
+          "level": 0
+        },
+        {
+          "name": "selected financial data",
+          "regex": "^selected\\s+financial\\s+data",
+          "level": 0
+        },
+        {
+          "name": "market risk",
+          "regex": "^(?:quantitative\\s+and\\s+qualitative\\s+disclosures\\s+about\\s+)?market\\s+risk",
+          "level": 0
+        },
+        {
+          "name": "property",
+          "regex": "^properties?$",
+          "level": 0
+        },
+        {
+          "name": "controls and procedures",
+          "regex": "^(?:disclosure\\s+)?controls\\s+and\\s+procedures",
+          "level": 0
+        },
+        {
+          "name": "corporate governance",
+          "regex": "^corporate\\s+governance",
+          "level": 0
+        }
+      ]
+    },
+    "t3": {
+      "headers": [
+        {
+          "name": "general",
+          "regex": "^general",
+          "level": 0
+        },
+        {
+          "name": "affiliations",
+          "regex": "^affiliations",
+          "level": 0
+        },
+        {
+          "name": "management and control",
+          "regex": "^management and control",
+          "level": 0
+        },
+        {
+          "name": "underwriters",
+          "regex": "^underwriters",
+          "level": 0
+        },
+        {
+          "name": "capital securities",
+          "regex": "^capital securities",
+          "level": 0
+        },
+        {
+          "name": "indenture securities",
+          "regex": "^indenture securities",
+          "level": 0
+        },
+        {
+          "name": "signatures",
+          "regex": "^signatures?\\.*$",
+          "level": 0
+        },
+        {
+          "name": "number",
+          "regex": "^(\\d+)",
+          "level": 1
+        }
+      ]
+    },
+    "13d": {
+      "headers": [
+        {
+          "name": "item",
+          "regex": "^item\\s+(\\d+)",
+          "level": 0
+        }
+      ]
+    }
+  },
+  "forms": {
+    "1-K": "1kpartii",
+    "1-K/A": "1kpartii",
+    "1-SA": "1kpartii",
+    "1-SA/A": "1kpartii",
+    "1-U": "1u",
+    "1-U/A": "1u",
+    "10-12B": "1u",
+    "10-12B/A": "1u",
+    "10-D": "10k",
+    "10-D/A": "10k",
+    "10-K": "10k",
+    "10-K/A": "10k",
+    "10-Q": "10k",
+    "10-Q/A": "10k",
+    "20-F": "20f",
+    "20-F/A": "20f",
+    "8-A12B": "1kpartii",
+    "8-A12B/A": "1kpartii",
+    "8-A12G": "1kpartii",
+    "8-A12G/A": "1kpartii",
+    "8-K": "8k",
+    "8-K/A": "8k",
+    "8-K12B": "8k",
+    "8-K12B/A": "8k",
+    "8-K12G3": "8k",
+    "8-K12G3/A": "8k",
+    "8-K15D5": "8k",
+    "8-K15D5/A": "8k",
+    "ABS-15G": "abs15g",
+    "ABS-15G/A": "abs15g",
+    "ABS-EE": "absee",
+    "ABS-EE/A": "absee",
+    "APP NTC": "appntc",
+    "APP NTC/A": "appntc",
+    "CB": "cb",
+    "CB/A": "cb",
+    "DSTRBRPT": "1kpartii",
+    "DSTRBRPT/A": "1kpartii",
+    "N-18F1": "n18f1",
+    "N-18F1/A": "n18f1",
+    "N-CSRS": "ncsrs",
+    "N-CSRS/A": "ncsrs",
+    "NT-10K": "nt10k",
+    "NT-10K/A": "nt10k",
+    "NT-10Q": "nt10k",
+    "NT-10Q/A": "nt10k",
+    "NT 20-F": "nt10k",
+    "NT 20-F/A": "nt10k",
+    "NT-NCEN": "nt10k",
+    "NT-NCEN/A": "nt10k",
+    "NT-NCSR": "nt10k",
+    "NT-NCSR/A": "nt10k",
+    "NTFNCEN": "nt10k",
+    "NTFNCEN/A": "nt10k",
+    "NTFNCSR": "nt10k",
+    "NTFNCSR/A": "nt10k",
+    "EX-99.CERT": "ex99cert",
+    "EX-99.CERT/A": "ex99cert",
+    "SC 13E3": "sc13e3",
+    "SC 13E3/A": "sc13e3",
+    "SC 14D9": "sc14d9",
+    "SC 14D9/A": "sc14d9",
+    "SP 15D2": "10k",
+    "SP 15D2/A": "10k",
+    "SD": "sd",
+    "SD/A": "sd",
+    "S-1": "s1",
+    "S-1/A": "s1",
+    "T-3": "t3",
+    "T-3/A": "t3",
+    "NT 10-K": "nt10k",
+    "NT 10-K/A": "nt10k",
+    "NT 10-Q": "nt10k",
+    "NT 10-Q/A": "nt10k",
+    "SC 13G": "13d",
+    "SC 13G/A": "13d",
+    "SC 13D": "13d",
+    "SC 13D/A": "13d"
+  }
+}
