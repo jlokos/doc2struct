@@ -3,8 +3,8 @@ import os
 import webbrowser
 from pathlib import Path
 import polars as pl
-from doc2struct import (convert_html_to_instructions, convert_instructions_to_standardized_text,
-                        tokenize, visualize_tokens, visualize_instructions, visualize_standardized_text)
+from doc2struct import (tokenize, normalize, convert_instructions_to_standardized_text,
+                        visualize_tokens, visualize_instructions, visualize_standardized_text)
 from time import time
 
 path = r"C:\Users\jgfri\Documents\datamule\oss\packages\doc2struct\data\filings\msft_10k\2021-07-29\000156459021039151\msft-10k_20210630.htm"
@@ -24,13 +24,14 @@ with open(path, "rb") as f:
 webbrowser.open(Path(path).resolve().as_uri())   # the original html, to compare against the visualizations
 
 s = time()
-visualize_tokens(list(tokenize(content)), f"{out}/tokens.html")
+tokens = list(tokenize(content))
+#visualize_tokens(tokens, f"{out}/tokens.html")
 
-instructions = convert_html_to_instructions(content)
-visualize_instructions(instructions, f"{out}/instructions.html")
-write_csv(instructions, f"{out}/instructions.csv")
+instructions = normalize(tokens)
+#visualize_instructions(instructions, f"{out}/instructions.html")
+#write_csv(instructions, f"{out}/instructions.csv")
 
 standardized_text = convert_instructions_to_standardized_text(instructions, "SEC:10-K")
 visualize_standardized_text(standardized_text, f"{out}/standardized_text.html")
-write_csv(standardized_text, f"{out}/standardized_text.csv")
+#write_csv(standardized_text, f"{out}/standardized_text.csv")
 print(time() - s)

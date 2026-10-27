@@ -123,10 +123,6 @@ Normalizes tokens into instructions with these columns:
 
 Block 1 is one instruction made of five instruction cells. Block 3 is one instruction: the whole table.
 
-## convert_html_to_instructions
-
-Takes html (a path or bytes), uses `html_tokenizer` then `token_normalizer`, and outputs instructions.
-
 ## convert_instructions_to_standardized_text
 
 Takes instructions, converts them into standardized text, suitable for storage in a parquet file. Supports new columns.
@@ -216,6 +212,6 @@ For example, an `href` column reads `href` from all instruction cells of a line,
 
 # todo
 - port to c / optimize
-- tables: title, footnotes, preamble and postamble
-- mapping dicts /goal
-- add full ruleset
+- make rulesets better with /goal
+- make tables better
+- make uhh lists better

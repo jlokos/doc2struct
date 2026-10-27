@@ -25,6 +25,13 @@ td.empty{background:#fafafa}
 .st-image{background:#FFF3E0;font-style:italic}
 .badge{font-family:monospace;font-size:11px;background:#fff;border:1px solid #bbb;border-radius:3px;padding:0 4px;margin-left:8px;font-weight:normal;color:#555}
 .cleaned{background:#B2DFDB}.dirty{background:#FFECB3}
+.tbl{display:inline-block;max-width:100%;margin:10px 0}
+.tbl-title{font-weight:bold;margin:0 0 4px}
+.tbl-pre{font-style:italic;color:#555;margin:0 0 6px}
+.tbl-foot{font-size:12px;color:#444;margin:6px 0 0}
+.tbl-foot b{margin-right:4px}
+.tbl-post{font-size:12px;color:#555;margin:6px 0 0}
+.tag{font-family:monospace;font-size:10px;background:#fff;border:1px solid #bbb;border-radius:3px;padding:0 4px;margin-right:6px;color:#666;font-weight:normal;font-style:normal}
 </style></head><body>"""
 
 
@@ -125,11 +132,22 @@ def visualize_instructions(rows, filename='instructions_visualization.html', ope
 
 
 def _st_table(r):
+    """A table with its title, preamble, footnotes and postamble, in document order."""
     cls = 'dirty' if r.get('cleaned') is False else 'cleaned'
-    out = [f"<div class='table-wrapper' style='margin-left:{r['level'] * 24}px'><div class='table-container {cls}'><table>"]
+    out = [f"<div class='table-wrapper' style='margin-left:{r['level'] * 24}px'><div class='tbl'>"]
+    if r.get('text'):
+        out.append(f"<div class='tbl-title'><span class='tag'>title</span>{escape(r['text'])}</div>")
+    if r.get('preamble'):
+        out.append(f"<div class='tbl-pre'><span class='tag'>preamble</span>{escape(r['preamble'])}</div>")
+    out.append(f"<div class='table-container {cls}'><table>")
     for row in r['matrix']:
         out.append('<tr>' + ''.join(f'<td>{escape(c)}</td>' for c in row) + '</tr>')
-    out.append('</table></div></div>')
+    out.append('</table></div>')
+    for fid, ftext in (r.get('footnotes') or ()):
+        out.append(f"<div class='tbl-foot'><span class='tag'>footnote</span><b>{escape(fid)}</b>{escape(ftext)}</div>")
+    if r.get('postamble'):
+        out.append(f"<div class='tbl-post'><span class='tag'>postamble</span>{escape(r['postamble'])}</div>")
+    out.append('</div></div>')
     return ''.join(out)
 
 
