@@ -1,0 +1,9 @@
+PCRE2 10.49
+Source: https://codeload.github.com/PCRE2Project/pcre2/zip/refs/tags/pcre2-10.49
+Archive SHA256: cf21acc48d3b77aa2cde80bf186f0db274fef1080ee4617b888f1236cd42d3be
+Licence: LICENCE.md
+
+Vendored C sources are unmodified. config.h and pcre2.h are copies of
+the upstream generic headers. The default character tables are copied
+from pcre2_chartables.c.dist. Built statically in 8-bit UTF/UCP mode,
+without JIT or the command-line tools.

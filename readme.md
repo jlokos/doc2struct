@@ -211,7 +211,7 @@ A custom column has:
 For example, an `href` column reads `href` from all instruction cells of a line, and an `item` column reads the number out of "Item 1A".
 
 # todo
-- port to c / optimize
+- port to c / optimize - hope to get 2gb.s
 - make rulesets better with /goal
 - make tables better
 - make uhh lists better

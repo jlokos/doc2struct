@@ -1,6 +1,9 @@
 # python
 __pycache__/
 *.py[cod]
+*.pyd
+*.so
+c/unicode_data.h
 *.egg-info/
 build/
 dist/

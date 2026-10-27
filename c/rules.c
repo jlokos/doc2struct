@@ -1,0 +1,137 @@
+#include "doc2struct.h"
+#include <string.h>
+#include <stdio.h>
+
+const char *ds_table_steps[] = {"validate_structure",
+                                "merge_formatting_chars",
+                                "remove_empty_rows",
+                                "remove_empty_columns",
+                                "remove_subset_rows_bottom_to_top",
+                                "remove_subset_rows_top_to_bottom",
+                                "remove_subset_columns_left_to_right",
+                                "remove_subset_columns_right_to_left",
+                                "merge_duplicate_header_rows_down",
+                                NULL};
+unsigned ds_style_bit(Str s) {
+    static const char *names[] = {"bold",     "italic",      "underline", "centered",
+                                  "all_caps", "proper_case", "fake_table"};
+    unsigned i;
+    for (i = 0; i < 7; i++)
+        if (ds_is(s, names[i]))
+            return 1u << i;
+    return 0;
+}
+Regex *ds_regex(Rules *r, Str pattern, int caseless) {
+    Regex *rx;
+    int error;
+    PCRE2_SIZE offset;
+    uint32_t options = PCRE2_UTF | PCRE2_UCP;
+    char *buf;
+    size_t i = 0, j = 0;
+    int in_class = 0;
+    if (caseless)
+        options |= PCRE2_CASELESS;
+    if (pattern.n > (SIZE_MAX - 1) / 3) {
+        snprintf(r->arena.error, sizeof(r->arena.error), "regex too large");
+        return NULL;
+    }
+    buf = ds_alloc(&r->arena, pattern.n * 3 + 1);
+    if (!buf)
+        return NULL;
+    while (i < pattern.n) {
+        if (!in_class && i + 4 <= pattern.n && !memcmp(pattern.p + i, "(?u)", 4)) {
+            i += 4;
+            continue;
+        }
+        if (!in_class && i + 4 <= pattern.n && !memcmp(pattern.p + i, "(?a)", 4)) {
+            options &= ~PCRE2_UCP;
+            i += 4;
+            continue;
+        }
+        if (!in_class && i + 4 <= pattern.n && !memcmp(pattern.p + i, "(?u:", 4)) {
+            memcpy(buf + j, "(?:", 3);
+            j += 3;
+            i += 4;
+            continue;
+        }
+        if (pattern.p[i] == '\\' && i + 1 < pattern.n) {
+            char c = pattern.p[i + 1];
+            if (c == 'Z') {
+                buf[j++] = '\\';
+                buf[j++] = 'z';
+                i += 2;
+                continue;
+            }
+            if (c == 'u' || c == 'U') {
+                size_t count = c == 'u' ? 4 : 8, k;
+                if (i + 2 + count <= pattern.n) {
+                    buf[j++] = '\\';
+                    buf[j++] = 'x';
+                    buf[j++] = '{';
+                    for (k = 0; k < count; k++)
+                        buf[j++] = pattern.p[i + 2 + k];
+                    buf[j++] = '}';
+                    i += 2 + count;
+                    continue;
+                }
+            }
+            buf[j++] = pattern.p[i++];
+            buf[j++] = pattern.p[i++];
+            continue;
+        }
+        if (pattern.p[i] == '[')
+            in_class = 1;
+        else if (pattern.p[i] == ']')
+            in_class = 0;
+        buf[j++] = pattern.p[i++];
+    }
+    rx = ds_alloc(&r->arena, sizeof(*rx));
+    if (!rx)
+        return NULL;
+    rx->code = pcre2_compile((PCRE2_SPTR)buf, j, options, &error, &offset, NULL);
+    if (!rx->code) {
+        PCRE2_UCHAR msg[160];
+        pcre2_get_error_message(error, msg, sizeof(msg));
+        snprintf(r->arena.error, sizeof(r->arena.error), "native regex at byte %zu: %s",
+                 (size_t)offset, (char *)msg);
+        return NULL;
+    }
+    pcre2_pattern_info(rx->code, PCRE2_INFO_CAPTURECOUNT, &rx->groups);
+    rx->next = r->regexes;
+    r->regexes = rx;
+    return rx;
+}
+int ds_match(Document *d, Regex *rx, Str text, int search) {
+    int rc;
+    size_t need;
+    if (!rx)
+        return 0;
+    need = (size_t)rx->groups + 1;
+    if (need > d->match_pairs) {
+        pcre2_match_data *next = pcre2_match_data_create((uint32_t)need, NULL);
+        if (!next) {
+            snprintf(d->arena.error, sizeof(d->arena.error), "out of memory");
+            return 0;
+        }
+        if (d->match)
+            pcre2_match_data_free(d->match);
+        d->match = next;
+        d->match_pairs = need;
+    }
+    rc = pcre2_match(rx->code, (PCRE2_SPTR)(text.p ? text.p : ""), text.n, 0,
+                     search ? 0 : PCRE2_ANCHORED, d->match, NULL);
+    if (rc >= 0)
+        return 1;
+    if (rc != PCRE2_ERROR_NOMATCH) {
+        PCRE2_UCHAR msg[160];
+        pcre2_get_error_message(rc, msg, sizeof(msg));
+        snprintf(d->arena.error, sizeof(d->arena.error), "native regex match: %s", (char *)msg);
+    }
+    return 0;
+}
+Str ds_group(Document *d, Str text, unsigned group) {
+    PCRE2_SIZE *o = pcre2_get_ovector_pointer(d->match);
+    if (group >= pcre2_get_ovector_count(d->match) || o[group * 2] == PCRE2_UNSET)
+        return (Str){0};
+    return (Str){text.p + o[group * 2], o[group * 2 + 1] - o[group * 2]};
+}
