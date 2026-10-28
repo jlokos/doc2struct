@@ -1,6 +1,7 @@
 {
   "name": "default",
   "headers": [],
+  "header_styles": ["bold", "all_caps", "proper_case"],
   "remove": {
     "patterns": [
       [

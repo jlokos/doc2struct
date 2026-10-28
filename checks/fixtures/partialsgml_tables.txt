@@ -1,0 +1,37 @@
+<TABLE>
+<CAPTION>
+                           Transaction
+                           Code
+Title of      Transaction  (Instr. 8)
+Security      Date         -----------  Amount or  Price
+(Instr. 3)   (mm/dd/yy)    Code     V          (D)
+--------------------------------------------------------------------------------------
+<S>         <C>            <C>      <C>          <C>      <C>       <C>       <C>
+Class A
+ Common Stock  12-22-99     M       V     A        7.04     118,250    I        (1)
+</TABLE>
+
+<TABLE>
+<CAPTION>
+                                           Number                                            Number   Owner-
+                                           of                                                of       ship
+                                           Deriv-                     Title and              Deriv-   of
+                  Conver-                  ative                      Amount of              ative    Deriv-
+                  sion                     Secur-                     Underlying             Secur-   ative  Nature
+                  of                       ities                      Securities             ities    Secur- of
+                  Exer-                    Acquired  Date             (Instr. 3      Price   Bene-    ity:   In-
+                  cise             Trans-  (A) or    Exercisable and  and 4)         of      ficially Direct direct
+                  Price   Trans-   action  Disposed  Expiration Date  -------------- Deriv-  Owned    (D) or Bene-
+                  of      action   Code    of(D)     (Month/Day/Year)         Amount ative   at End   In-    ficial
+Title of          Deriv-  Date     (Instr. (Instr.3, ----------------         or     Secur-  of       direct Owner-
+Derivative        ative   (Month/  8)      4 and 5)  Date     Expira-         Number ity     Month    (I)    ship
+Security          Secur-  Day/     ------  --------  Exer-    tion            of     (Instr. (Instr.  (Instr (Instr.
+(Instr. 3)        ity     Year)    Code V  (A)   (D) cisable  Date    Title   Shares 5)      4)       4)     4)
+--------------------------------------------------------------------------------------------------------------------
+<S>            <C>      <C>     <C>      <C>   <C> <C>     <C>     <C>    <C>    <C>     <C>      <C>     <C>
+Directors Stock   4.06  12/14/99           A 21,754  12/99    11/09  Class A  21,754         313,103     D
+ Option Plan                                         11/01           Common
+--------------------------------------------------------------------------------------------------------------------
+ISO Option        7.04  12/22/99     V     D 37,591   7/94    12/99  Class A  37,591  $5.50     0        I      (1)
+                                                     11/97           Common          to $7.78
+</TABLE>

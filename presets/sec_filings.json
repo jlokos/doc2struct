@@ -6,7 +6,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -20,7 +21,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -34,7 +36,8 @@
         {
           "name": "part",
           "regex": "^part\\s*([ivx]+)$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -44,7 +47,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)\\.?([a-z])?(?![a-z])",
-          "level": 1
+          "level": 1,
+          "requires": []
         }
       ]
     },
@@ -53,7 +57,8 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -63,7 +68,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)\\.?([a-z])?(?![a-z])",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "letter",
@@ -93,7 +99,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+(?:\\.\\d+)?)",
-          "level": 0
+          "level": 0,
+          "requires": []
         }
       ]
     },
@@ -102,7 +109,8 @@
         {
           "name": "part",
           "regex": "^part\\s*([ivx]+)",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -112,7 +120,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+\\.\\d+)",
-          "level": 1
+          "level": 1,
+          "requires": []
         }
       ]
     },
@@ -121,7 +130,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -184,12 +194,14 @@
         {
           "name": "part",
           "regex": "^part\\s*([ivx]+)",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)",
-          "level": 1
+          "level": 1,
+          "requires": []
         }
       ]
     },
@@ -212,7 +224,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\b",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -226,7 +239,8 @@
         {
           "name": "part",
           "regex": "^part\\s*([ivx]+)",
-          "level": 0
+          "level": 0,
+          "requires": []
         }
       ]
     },
@@ -235,7 +249,8 @@
         {
           "name": "item",
           "regex": "^([1-9]\\d?)\\.\\s+\\S",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "letter",
@@ -252,7 +267,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -274,7 +290,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -293,7 +310,8 @@
         {
           "name": "section",
           "regex": "^section\\s+([1-3])(?:\\s*[.\\-\\u2013\\u2014:]\\s*(?:conflict\\s+minerals\\s+disclosure|resource\\s+extraction\\s+issuer\\s+disclosure|exhibits))?\\s*\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -303,7 +321,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+\\.\\d+)",
-          "level": 1
+          "level": 1,
+          "requires": []
         }
       ]
     },
@@ -516,7 +535,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d+)",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -533,17 +553,20 @@
         {
           "name": "part",
           "regex": "^part\\s+(i)\\s*(?:[.\\-–—:]\\s*)?financial\\s+information\\s*\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+(ii)\\s*(?:[.\\-–—:]\\s*)?other\\s+information\\s*\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s*([ivx]+)\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -553,7 +576,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)\\.?([a-z])?(?![a-z])",
-          "level": 1
+          "level": 1,
+          "requires": []
         }
       ]
     },
@@ -562,7 +586,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)(?:\\s*\\(([a-z])\\))?(?=\\s|[.:]|$)",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -579,17 +604,20 @@
         {
           "name": "part",
           "regex": "^part\\s+(i)\\s*(?:[.\\-\\u2013\\u2014:]\\s*)?distribution\\s+information\\s*\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+(ii)\\s*(?:[.\\-\\u2013\\u2014:]\\s*)?other\\s+information\\s*\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s*([ivx]+)$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -599,7 +627,8 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)\\.?([a-z])?(?![a-z])",
-          "level": 1
+          "level": 1,
+          "requires": []
         }
       ]
     },
@@ -728,7 +757,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -785,7 +815,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "securities description",
@@ -815,12 +846,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivxlcdm]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "section",
           "regex": "^section\\s+(\\d{1,4}(?:\\.\\d{1,4})*[a-z]?)\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "consent",
@@ -1103,7 +1136,8 @@
         {
           "name": "article",
           "regex": "^article\\s+(\\d{1,3}|[ivxlcdm]+)\\s*\\([^.!?]{1,120}\\)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "documents examined",
@@ -1195,7 +1229,8 @@
         {
           "name": "article",
           "regex": "^article\\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "accountant change",
@@ -1633,7 +1668,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -1695,7 +1731,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -1705,12 +1742,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivxlcdm]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "section",
           "regex": "^section\\s+(\\d{1,4}(?:\\.\\d{1,4})*[a-z]?)\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -1758,7 +1797,8 @@
         {
           "name": "article",
           "regex": "^article\\s+(\\d{1,3}|[ivxlcdm]+)\\s*\\([^.!?]{1,120}\\)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "subscription agreement",
@@ -1768,7 +1808,8 @@
         {
           "name": "article",
           "regex": "^article\\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "secretary certificate",
@@ -2044,7 +2085,8 @@
         {
           "name": "part",
           "regex": "^part\\s+([abc]|[ivx]+)\\s*[:.]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "additional information",
@@ -2054,7 +2096,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -2144,22 +2187,26 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([abc])\\s*[-–—:.]\\s*other\\s+information\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "risk factors",
@@ -2207,7 +2254,8 @@
         {
           "name": "proposal",
           "regex": "^proposal\\s*#?\\s*(\\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)(?:\\s*[:.–—-]\\s*[^.!?;]{1,160})?\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "voting procedures",
@@ -2237,7 +2285,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2}\\.\\d{2})(?!\\d)\\s*[.:]?\\s+(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "forward looking statements",
@@ -2283,7 +2332,8 @@
         {
           "name": "proposal",
           "regex": "^proposal\\s*:\\s*[^.!?;]{1,160}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "election of directors",
@@ -2371,17 +2421,20 @@
         {
           "name": "part",
           "regex": "^part\\s+(i)\\s*(?:[.\\-–—:]\\s*)?financial\\s+information\\s*\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+(ii)\\s*(?:[.\\-–—:]\\s*)?other\\s+information\\s*\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s*([ivx]+)\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -2391,17 +2444,20 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)\\.?([a-z])?(?![a-z])",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([12])\\s*[-–—:.]\\s*(?:financial\\s+information|other\\s+information)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+(i|ii|iii|iv|v|vi)\\s*[:.]\\s+\\S",
-          "level": 1
+          "level": 1,
+          "requires": []
         }
       ]
     },
@@ -2410,7 +2466,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -2464,7 +2521,8 @@
         {
           "name": "article",
           "regex": "^(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth)\\s*[:.]$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "charter",
@@ -2482,7 +2540,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -2492,12 +2551,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivxlcdm]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "section",
           "regex": "^section\\s+(\\d{1,4}(?:\\.\\d{1,4})*[a-z]?)\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -2545,7 +2606,8 @@
         {
           "name": "article",
           "regex": "^article\\s+(\\d{1,3}|[ivxlcdm]+)\\s*\\([^.!?]{1,120}\\)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "charter",
@@ -2565,7 +2627,8 @@
         {
           "name": "article",
           "regex": "^article\\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         }
       ]
     },
@@ -2574,12 +2637,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -2599,17 +2664,20 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "exhibits",
@@ -2851,12 +2919,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\.?([a-z])?(?![a-z\\d])\\s*[.:–—-]\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?;]{1,150}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "report",
@@ -3098,7 +3168,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -3160,7 +3231,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "code of ethics",
@@ -3324,12 +3396,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -3349,17 +3423,20 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "prospectus summary",
@@ -3378,7 +3455,8 @@
         {
           "name": "part",
           "regex": "^part\\s*([ivx]+)$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -3388,12 +3466,14 @@
         {
           "name": "item",
           "regex": "^item\\s*(\\d+)\\.?([a-z])?(?![a-z])",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([1-4])\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         }
       ]
     },
@@ -3472,12 +3552,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ab])\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+([ab])\\s+(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?;]{1,140}[:.]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "registration contents",
@@ -3581,12 +3663,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -3606,7 +3690,8 @@
         {
           "name": "proposal",
           "regex": "^proposal\\s*#?\\s*(\\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)(?:\\s*[:.–—-]\\s*[^.!?;]{1,160})?\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "voting procedures",
@@ -3636,7 +3721,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2}\\.\\d{2})(?!\\d)\\s*[.:]?\\s+(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "forward looking statements",
@@ -3661,17 +3747,20 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "prospectus summary",
@@ -3717,7 +3806,8 @@
         {
           "name": "proposal",
           "regex": "^proposal\\s*:\\s*[^.!?;]{1,160}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "election of directors",
@@ -3823,7 +3913,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?:\\(([a-z])\\))?\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?;]{1,170}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "explanatory note",
@@ -3863,7 +3954,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2}\\.\\d{2})(?!\\d)\\s*[.:]?\\s+(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "letter of transmittal",
@@ -3907,7 +3999,8 @@
         {
           "name": "item",
           "regex": "^(?:sub[- ]?)?item\\s+(77o)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -4142,12 +4235,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -4177,17 +4272,20 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "prospectus summary",
@@ -4230,7 +4328,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*\\.\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?;]{1,130}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -4240,7 +4339,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -4297,7 +4397,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -4307,12 +4408,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivxlcdm]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "section",
           "regex": "^section\\s+(\\d{1,4}(?:\\.\\d{1,4})*[a-z]?)\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -4349,7 +4452,8 @@
         {
           "name": "proposal",
           "regex": "^proposal\\s*#?\\s*(\\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)(?:\\s*[:.–—-]\\s*[^.!?;]{1,160})?\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "voting procedures",
@@ -4379,7 +4483,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2}\\.\\d{2})(?!\\d)\\s*[.:]?\\s+(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "forward looking statements",
@@ -4440,7 +4545,8 @@
         {
           "name": "proposal",
           "regex": "^proposal\\s*:\\s*[^.!?;]{1,160}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "election of directors",
@@ -4588,7 +4694,8 @@
         {
           "name": "proposal",
           "regex": "^proposal\\s*#?\\s*(\\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)(?:\\s*[:.–—-]\\s*[^.!?;]{1,160})?\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "voting procedures",
@@ -4618,7 +4725,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2}\\.\\d{2})(?!\\d)\\s*[.:]?\\s+(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "forward looking statements",
@@ -4674,7 +4782,8 @@
         {
           "name": "proposal",
           "regex": "^proposal\\s*:\\s*[^.!?;]{1,160}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "election of directors",
@@ -4738,12 +4847,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -4763,7 +4874,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "offering circular",
@@ -4773,17 +4885,20 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*(?:exhibits|notification|end)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "prospectus summary",
@@ -4954,7 +5069,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -5016,7 +5132,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "code of ethics",
@@ -5103,12 +5220,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -5128,27 +5247,32 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*([a-z])?\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+(f/s)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "exhibits",
@@ -5175,7 +5299,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -5237,7 +5362,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "code of ethics",
@@ -5275,7 +5401,8 @@
         {
           "name": "item",
           "regex": "^(?:sub[- ]?)?item\\s+(77d)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "policy statement",
@@ -5312,7 +5439,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -5374,7 +5502,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "code of ethics",
@@ -5457,7 +5586,8 @@
         {
           "name": "part",
           "regex": "^part\\s+(\\d{1,2})\\s*[-–—:]\\s*[^.!?]{1,140}\\s*[:.]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -5481,7 +5611,8 @@
         {
           "name": "item",
           "regex": "^(?:sub[- ]?)?item\\s+(77i)(?:\\((\\d{1,2})\\))?\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "securities terms",
@@ -5500,7 +5631,8 @@
         {
           "name": "part",
           "regex": "^part\\s+([abc]|[ivx]+)\\s*[:.]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "additional information",
@@ -5510,7 +5642,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -5600,22 +5733,26 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([abc])\\s*[-–—:.]\\s*other\\s+information\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "risk factors",
@@ -5635,7 +5772,8 @@
         {
           "name": "proposal",
           "regex": "^proposal\\s*#?\\s*(\\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)(?:\\s*[:.–—-]\\s*[^.!?;]{1,160})?\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "voting procedures",
@@ -5665,7 +5803,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2}\\.\\d{2})(?!\\d)\\s*[.:]?\\s+(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "forward looking statements",
@@ -5675,7 +5814,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -5732,7 +5872,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -5742,12 +5883,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivxlcdm]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "section",
           "regex": "^section\\s+(\\d{1,4}(?:\\.\\d{1,4})*[a-z]?)\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -5795,7 +5938,8 @@
         {
           "name": "article",
           "regex": "^article\\s+(\\d{1,3}|[ivxlcdm]+)\\s*\\([^.!?]{1,120}\\)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "auditor report",
@@ -5909,7 +6053,8 @@
         {
           "name": "proposal",
           "regex": "^proposal\\s*:\\s*[^.!?;]{1,160}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "election of directors",
@@ -5923,7 +6068,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -5985,7 +6131,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -5995,12 +6142,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivxlcdm]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "section",
           "regex": "^section\\s+(\\d{1,4}(?:\\.\\d{1,4})*[a-z]?)\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -6048,7 +6197,8 @@
         {
           "name": "article",
           "regex": "^article\\s+(\\d{1,3}|[ivxlcdm]+)\\s*\\([^.!?]{1,120}\\)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "section",
@@ -6123,7 +6273,8 @@
         {
           "name": "section",
           "regex": "^(i|ii|iii|iv|v|vi)\\.\\s*[^.!?]{1,140}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "verification",
@@ -6334,7 +6485,8 @@
         {
           "name": "part",
           "regex": "^part\\s+([abc]|[ivx]+)\\s*[:.]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "additional information",
@@ -6344,7 +6496,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -6434,22 +6587,26 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([abc])\\s*[-–—:.]\\s*other\\s+information\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "risk factors",
@@ -6518,12 +6675,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -6543,17 +6702,20 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "exhibits",
@@ -6568,7 +6730,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[-\\u2013\\u2014]\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         }
       ]
     },
@@ -6623,7 +6786,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -6685,7 +6849,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "code of ethics",
@@ -6865,7 +7030,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "article",
@@ -6927,7 +7093,8 @@
         {
           "name": "article",
           "regex": "^article\\s+([ivxlcdm]+|\\d{1,3})\\s*[.:–—-]\\s*[^.!?;]{1,120}\\.?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -6937,12 +7104,14 @@
         {
           "name": "part",
           "regex": "^part\\s+([ivxlcdm]+)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "section",
           "regex": "^section\\s+(\\d{1,4}(?:\\.\\d{1,4})*[a-z]?)\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "appendix",
@@ -6990,7 +7159,8 @@
         {
           "name": "article",
           "regex": "^article\\s+(\\d{1,3}|[ivxlcdm]+)\\s*\\([^.!?]{1,120}\\)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "subscription agreement",
@@ -7000,7 +7170,8 @@
         {
           "name": "article",
           "regex": "^article\\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "secretary certificate",
@@ -7060,7 +7231,8 @@
         {
           "name": "part",
           "regex": "^part\\s+([abc]|[ivx]+)\\s*[:.]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "additional information",
@@ -7070,7 +7242,8 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})(?!\\d)\\s*[.:](?!\\d)\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,170}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "signatures",
@@ -7160,22 +7333,26 @@
         {
           "name": "item",
           "regex": "^item\\s+(\\d{1,2})\\s*[.:]?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "item",
           "regex": "^item\\s*[-–—]\\s*(\\d{1,2})\\s*[.:]?\\s*(?!\\s*(?:is|are|was|were|has|have|had|shall|will)\\b)[^.!?]{1,140}\\.?$",
-          "level": 1
+          "level": 1,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([ivx]+)\\s*[-–—:]\\s*information\\s+not\\s+required\\s+in\\s+(?:the\\s+)?prospectus\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "part",
           "regex": "^part\\s+([abc])\\s*[-–—:.]\\s*other\\s+information\\s*[.:]?$",
-          "level": 0
+          "level": 0,
+          "requires": []
         },
         {
           "name": "risk factors",

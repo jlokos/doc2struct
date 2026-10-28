@@ -149,7 +149,7 @@ static int input(PyObject *o, Str *out, PyObject **owner) {
         o = *owner;
     }
     if (!PyBytes_Check(o)) {
-        PyErr_SetString(PyExc_TypeError, "html must be bytes, bytearray, or str");
+        PyErr_SetString(PyExc_TypeError, "input must be bytes, bytearray, or str");
         return 0;
     }
     *out = (Str){PyBytes_AS_STRING(o), (size_t)PyBytes_GET_SIZE(o)};
@@ -1085,7 +1085,35 @@ static PyObject *pdf_impl(PyObject *self, PyObject *args, int instructions) {
 static PyObject *parse_pdf(PyObject *self, PyObject *args) { return pdf_impl(self,args,0); }
 static PyObject *pdf_instructions(PyObject *self, PyObject *args) { return pdf_impl(self,args,1); }
 
+static PyObject *text_instructions_impl(PyObject *args, int partial) {
+    PyObject *source, *owner = NULL, *result = NULL;
+    Py_ssize_t tab_size = 8;
+    Str bytes;
+    Document *document;
+    doc2struct_error error;
+    if (!PyArg_ParseTuple(args, "O|n:text_instructions", &source, &tab_size)) return NULL;
+    if (tab_size < 1 || tab_size > 256) {
+        PyErr_SetString(PyExc_ValueError, "tab_size must be between 1 and 256");
+        return NULL;
+    }
+    if (!input(source, &bytes, &owner)) return NULL;
+    Py_BEGIN_ALLOW_THREADS
+    document = partial
+        ? doc2struct_partialsgml_instructions(NULL, bytes, (size_t)tab_size, &error)
+        : doc2struct_text_instructions(NULL, bytes, (size_t)tab_size, &error);
+    Py_END_ALLOW_THREADS
+    if (document) result = export_runs(document);
+    else native_error(error.message);
+    doc2struct_document_free(document);
+    Py_XDECREF(owner);
+    return result;
+}
+static PyObject *text_instructions(PyObject *self, PyObject *args) { return text_instructions_impl(args, 0); }
+static PyObject *partialsgml_instructions(PyObject *self, PyObject *args) { return text_instructions_impl(args, 1); }
+
 static PyMethodDef methods[] = {
+    {"text_instructions", text_instructions, METH_VARARGS, "Convert plain text to native instructions."},
+    {"partialsgml_instructions", partialsgml_instructions, METH_VARARGS, "Convert text with partial SGML to native instructions."},
     {"pdfium_init", pdfium_init, METH_O, "Initialize the required private PDFium engine."},
     {"parse_pdf", parse_pdf, METH_VARARGS, "Extract, lay out and standardize PDF bytes in C."},
     {"pdf_instructions", pdf_instructions, METH_VARARGS, "Extract PDF instructions in C."},

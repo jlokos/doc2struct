@@ -130,7 +130,7 @@ def check_title_blocks():
     # Matching titles merge even when they are complete, capitalized phrases.
     rows = parse('<p><b>Revenue</b></p><p><b>Expenses</b></p>')
     assert len(rows) == 1 and rows[0]['text'] == 'Revenue Expenses'
-    rules = {'headers': [{'name': 'section', 'regex': '^section', 'level': 0}]}
+    rules = {'headers': [{'name': 'section', 'regex': '^section', 'level': 0, 'requires': []}]}
     rows = parse('<p><b>Section one</b></p><p><i>Section two</i></p>', rules)
     assert len(rows) == 2 and rows[0]['level'] == rows[1]['level']
     rows = parse('<p style="font-size:18px"><b>Section one</b></p>'
@@ -229,12 +229,57 @@ def check_list_continuations():
             raise AssertionError((field, value))
 
 
+def check_shared_header_styles():
+    header = {'name': 'topic', 'regex': r'^underwriting\b', 'level': 0}
+
+    def matches(html, extra=None, rule=None):
+        rules = {'headers': [header if rule is None else rule], **(extra or {})}
+        content = html.encode()
+        rows = ds.parse_html(content, rules)
+        assert rows == ds.convert_instructions_to_standardized_text(ds.normalize(ds.tokenize(content)), rules)
+        return any(r['class'] == 'topic' for r in rows)
+
+    assert ds.Rules().header_styles == ('bold', 'all_caps', 'proper_case')
+    assert ds.Rules().lists.max_tail_rows == 1
+    assert not matches('<p>underwriting discounts and commissions apply.</p>')
+    assert matches('<p><b>underwriting expanded terms</b></p>')
+    assert matches('<p>UNDERWRITING EXPANDED TERMS</p>')
+    assert matches('<p>Underwriting Agreement</p>')
+    assert not matches('<p><i>underwriting expanded terms</i></p>')
+    assert matches('<p>underwriting expanded terms</p>', {'header_styles': []})
+    assert matches('<p>underwriting expanded terms</p>', rule={**header, 'requires': []})
+    assert matches('<p><u>underwriting expanded terms</u></p>', {'header_styles': ['underline']})
+    assert matches('<p><i>underwriting expanded terms</i></p>', rule={**header, 'requires': ['italic']})
+    both = {**header, 'requires': ['bold', 'italic']}
+    assert not matches('<p><b>underwriting expanded terms</b></p>', rule=both)
+    assert matches('<p><b><i>underwriting expanded terms</i></b></p>', rule=both)
+    inherited = ds.HeaderRule('topic', '^underwriting', 0)
+    unstyled = ds.HeaderRule('topic', '^underwriting', 0, requires=())
+    assert 'requires' not in inherited.to_dict()
+    assert unstyled.to_dict()['requires'] == []
+    assert ds.load_rules({'headers': [unstyled.to_dict()]}).headers[0].requires == ()
+    assert ds.load_rules({'headers': [inherited.to_dict()]}).headers[0].requires is None
+    for styles in [[], ['underline']]:
+        assert merge(ds.load_rules({}), ds.load_rules({'header_styles': styles})).header_styles == tuple(styles)
+    for name, text in [('item', 'item 1. business'), ('part', 'part i')]:
+        assert any(r['class'] == name for r in ds.parse_html(('<p>'+text+'</p>').encode(), 'SEC:10-K'))
+    for invalid in [{'header_styles': None}, {'header_styles': 'bold'}, {'header_styles': ['unknown']},
+                    {'header_styles': [1]}, {'headers': [{**header, 'requires': None}]}]:
+        try:
+            ds.load_rules(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(invalid)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--baseline', type=Path)
     ap.add_argument('--cli', type=Path)
     ap.add_argument('--corpus', type=Path)
     args = ap.parse_args()
+    check_shared_header_styles()
     check_preserved_text()
     check_text_blocks()
     check_title_blocks()

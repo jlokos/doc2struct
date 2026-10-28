@@ -109,6 +109,12 @@ static Rules *compile(JValue *root,doc2struct_error *error) {
     if(!r){if(error)snprintf(error->message,sizeof(error->message),"out of memory");return NULL;}
     if(!root||root->type!=J_OBJECT){bad(&r->arena,"rules must be an object");goto fail;}
     if(!field(&r->arena,root,"name",J_STRING,0))goto fail;
+    v=field(&r->arena,root,"header_styles",J_ARRAY,0);if(!v)goto fail;
+    for(c=v->child;c;c=c->next) {
+        unsigned bit=ds_style_bit(text(r,c));
+        if(!bit){bad(&r->arena,"unknown default header style");goto fail;}
+        r->header_styles|=bit;
+    }
     v=field(&r->arena,root,"headers",J_ARRAY,0);if(!v)goto fail;
     r->nheaders=v->count;r->headers=array(r,v->count,sizeof(Header));if(!r->headers)goto fail;
     for(c=v->child,i=0;c;c=c->next,i++) {
@@ -122,6 +128,7 @@ static Rules *compile(JValue *root,doc2struct_error *error) {
         if(r->arena.error[0]||!x)goto fail;
         h->rx=ds_regex(r,x->text,0);if(!h->rx)goto fail;
         x=field(&r->arena,c,"requires",J_ARRAY,1);
+        h->has_requires=x!=NULL;
         if(x)for(x=x->child;x;x=x->next) {
             unsigned bit=ds_style_bit(text(r,x));
             if(!bit){bad(&r->arena,"unknown required header style");goto fail;}
@@ -236,7 +243,7 @@ char *doc2struct_rules_merge_json(Str base_json,Str extra_json,size_t *size,doc2
     Arena a={0};JValue *base,*extra,*defaults,*b,*x,*tail;Rules *r=NULL;
     Str json={0};char *out=NULL;size_t i;
     static const char *const append[]={"headers","columns"};
-    static const char *const replace[]={"remove","tables","lists"};
+    static const char *const replace[]={"remove","tables","lists","header_styles"};
     if(size)*size=0;if(error)error->message[0]=0;
     base=resolved(&a,base_json,0);extra=resolved(&a,extra_json,0);
     defaults=ds_config_parse(&a,doc2struct_defaults_json());
@@ -249,7 +256,7 @@ char *doc2struct_rules_merge_json(Str base_json,Str extra_json,size_t *size,doc2
         else {for(tail=b->child;tail->next;tail=tail->next){}tail->next=x->child;}
         b->count+=x->count;
     }
-    for(i=0;i<3;i++) {
+    for(i=0;i<4;i++) {
         b=ds_config_get(base,replace[i]);x=ds_config_get(extra,replace[i]);
         if(!ds_config_equal(x,ds_config_get(defaults,replace[i]))) {
             JValue *next=b->next;*b=*x;b->next=next;

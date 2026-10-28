@@ -79,9 +79,8 @@ typedef struct doc2struct_regex {
 typedef struct {
     Str name;
     Regex *rx;
-    int level;
-    unsigned
-        requires;
+    int level, has_requires;
+    unsigned requires;
 } Header;
 typedef struct {
     Regex *rx;
@@ -93,6 +92,7 @@ typedef struct doc2struct_rules {
     Regex *regexes;
     Header *headers;
     size_t nheaders;
+    unsigned header_styles;
     Remove *remove;
     size_t nremove;
     Column *columns;

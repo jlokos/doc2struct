@@ -210,9 +210,12 @@ A custom column has:
 
 For example, an `href` column reads `href` from all instruction cells of a line, and an `item` column reads the number out of "Item 1A".
 
+## notes
+
+- doc2struct does not support OCR
+
 ## todo
 - add txt support (probably just newlines + custom tokenizer)
-
 - then general spot check and tell it ito imrpove . so e.g. do 10 10-ks, spot check, move on.
 - have it do rulesets across pdf and text later -text epsecially
 

@@ -54,6 +54,7 @@ add_library(doc2struct STATIC
     src/config_json.c
     src/memory.c
     src/text.c
+    src/text_layout.c
     src/tokenizer.c
     src/normalizer.c
     src/rules.c
@@ -119,6 +120,9 @@ if(DOC2STRUCT_BUILD_CHECKS)
     add_executable(doc2struct_check ../checks/c/end_to_end.c)
     target_link_libraries(doc2struct_check PRIVATE doc2struct)
     add_test(NAME native_end_to_end COMMAND doc2struct_check)
+    add_executable(doc2struct_text_check ../checks/c/text.c)
+    target_link_libraries(doc2struct_text_check PRIVATE doc2struct)
+    add_test(NAME native_text COMMAND doc2struct_text_check)
     add_executable(doc2struct_pdf_check ../checks/c/pdf.c)
     target_link_libraries(doc2struct_pdf_check PRIVATE doc2struct)
     add_test(NAME native_pdf COMMAND doc2struct_pdf_check

@@ -112,6 +112,16 @@ doc2struct_document *doc2struct_parse_pdf(doc2struct_parser *, doc2struct_string
                                         doc2struct_error *error);
 doc2struct_document *doc2struct_pdf_instructions(doc2struct_parser *, doc2struct_string input,
                                                const char *password, doc2struct_error *error);
+/* Individual text document bodies; the caller selects the syntax. Text mode
+ * treats angle brackets literally. Partial SGML consumes known layout tags,
+ * retaining unknown tags/field names. Both return the same runs as HTML/PDF.
+ * Input is UTF-8, with the HTML frontend's Windows-1252 fallback for bytes.
+ * tab_size is 1..256 (Python defaults to 8); indent uses 8px character cells.
+ * Results own their text. Input bytes need only live until return. */
+doc2struct_document *doc2struct_text_instructions(doc2struct_parser *, doc2struct_string input,
+                                                size_t tab_size, doc2struct_error *error);
+doc2struct_document *doc2struct_partialsgml_instructions(doc2struct_parser *, doc2struct_string input,
+                                                       size_t tab_size, doc2struct_error *error);
 /* Page geometry is in points, with a top-left origin after page rotation.
  * Page views are borrowed and valid only during the callback. Returning zero
  * cancels extraction. Callbacks run outside the engine lock. */

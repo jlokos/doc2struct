@@ -50,7 +50,7 @@ setup(
     ext_modules=[Extension(
         'doc2struct._native',
         sources=['native/module.c'] + [str(core / (name + '.c')) for name in (
-            'api', 'config', 'config_json', 'memory', 'text', 'tokenizer', 'normalizer',
+            'api', 'config', 'config_json', 'memory', 'text', 'text_layout', 'tokenizer', 'normalizer',
             'rules', 'parser', 'standardized_text', 'lists', 'flow', 'json', 'tables', 'pdf', 'pdf_layout',
         )] + [str(pcre / ('pcre2_' + name + '.c')) for name in pcre_sources],
         include_dirs=[str(bundled / 'c/include'), str(core), str(pcre), str(bundled / 'c/vendor/pdfium')],

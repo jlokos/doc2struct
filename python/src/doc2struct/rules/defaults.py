@@ -3,6 +3,7 @@ import json
 from .. import _native
 
 _DEFAULTS = json.loads(_native.defaults_json())
+DEFAULT_HEADER_STYLES = tuple(_DEFAULTS['header_styles'])
 _REMOVE = _DEFAULTS['remove']
 _TABLES = _DEFAULTS['tables']
 _LISTS = _DEFAULTS['lists']

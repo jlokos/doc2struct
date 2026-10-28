@@ -14,6 +14,11 @@ A rule pack (presets/*.json) is one file for a family of documents:
 
 Document types match case-insensitively. A rule set lists only what differs from the defaults (presets/defaults.json).
 Stage code contains no rule data.
+
+header_styles is an any-of policy shared by rules without an explicit requires
+field. It defaults to bold, all_caps, or proper_case. A header's requires list
+overrides that policy and requires every listed style; requires=[] accepts an
+unstyled heading. header_styles=[] disables the shared policy entirely.
 """
 import json
 from pathlib import Path
@@ -83,7 +88,7 @@ def _resolve(source) -> Rules:
 
 
 def merge(base: Rules, extra: Rules) -> Rules:
-    """Append headers/columns; replace nondefault remove/tables/lists groups."""
+    """Append headers/columns; replace nondefault remove/tables/lists/header_styles."""
     return Rules.from_dict(json.loads(_native.merge_rules(
         json.dumps(base.to_dict(), allow_nan=False), json.dumps(extra.to_dict(), allow_nan=False))))
 

@@ -6,7 +6,7 @@ from .. import _native
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-from .defaults import (DEFAULT_FOOTNOTE_LINES, DEFAULT_FOOTNOTE_REGEX, DEFAULT_POSTAMBLE_LINES,
+from .defaults import (DEFAULT_HEADER_STYLES, DEFAULT_FOOTNOTE_LINES, DEFAULT_FOOTNOTE_REGEX, DEFAULT_POSTAMBLE_LINES,
                        DEFAULT_PREAMBLE_LINES, DEFAULT_REPEAT_THRESHOLD, KNOWN_STYLES, KNOWN_TABLE_STEPS,
                        RESERVED_COLUMNS, STANDARD_REMOVE, DEFAULT_SINGLE_ROW_TO_TEXT, DEFAULT_PAGE_LABEL_REGEX,
                        DEFAULT_TITLE_FROM_SECTION, DEFAULT_UNWRAP_LAYOUT, DEFAULT_ANNOTATION_EXCLUDE_REGEX,
@@ -58,17 +58,17 @@ class HeaderRule:
     name: str                          # class, e.g. 'item'
     regex: str                         # matched against the complete lowercased, whitespace-normalized line
     level: int                         # nesting level, 0 = outermost
-    requires: Tuple[str, ...] = ()     # styles the first piece must have (see defaults.KNOWN_STYLES)
+    requires: Optional[Tuple[str, ...]] = None  # None inherits any shared style; () permits unstyled; otherwise all required
 
     def to_dict(self):
         d = {'name': self.name, 'regex': self.regex, 'level': self.level}
-        if self.requires:
+        if self.requires is not None:
             d['requires'] = list(self.requires)
         return d
 
     @classmethod
     def from_dict(cls, d):
-        return cls(d['name'], d['regex'], int(d['level']), tuple(d.get('requires', ())))
+        return cls(d['name'], d['regex'], int(d['level']), tuple(d['requires']) if 'requires' in d else None)
 
 
 @dataclass(frozen=True)
@@ -156,6 +156,7 @@ class Rules:
     tables: TableRules = field(default_factory=TableRules)
     columns: List[CustomColumn] = field(default_factory=list)
     lists: ListRules = field(default_factory=ListRules)
+    header_styles: Tuple[str, ...] = DEFAULT_HEADER_STYLES  # any listed style; empty disables the shared gate
 
     def validate(self):
         _native.prepare_rules(json.dumps(self.to_dict(), ensure_ascii=False, allow_nan=False))
@@ -164,7 +165,7 @@ class Rules:
     def to_dict(self):
         return {'name': self.name, 'headers': [h.to_dict() for h in self.headers], 'remove': self.remove.to_dict(),
                 'tables': self.tables.to_dict(), 'columns': [c.to_dict() for c in self.columns],
-                'lists': self.lists.to_dict()}
+                'lists': self.lists.to_dict(), 'header_styles': list(self.header_styles)}
 
     @classmethod
     def from_dict(cls, d):
@@ -173,4 +174,5 @@ class Rules:
                    remove=RemoveRules.from_dict(d.get('remove', {})),
                    tables=TableRules.from_dict(d.get('tables', {})),
                    columns=[CustomColumn.from_dict(c) for c in d.get('columns', ())],
-                   lists=ListRules.from_dict(d.get('lists', {}))).validate()
+                   lists=ListRules.from_dict(d.get('lists', {})),
+                   header_styles=tuple(d.get('header_styles', DEFAULT_HEADER_STYLES))).validate()

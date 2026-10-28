@@ -600,10 +600,15 @@ static Str rule_text(Document *d, Line *line) {
 static int header_match(Document *d, const Rules *r, Line *line, Str text) {
     size_t j;
     unsigned flags = line->nitems ? attrs(line->items) : 0;
-    for (j = 0; j < r->nheaders; j++)
-        if ((r->headers[j].requires & flags) == r->headers[j].requires &&
-            ds_match(d, r->headers[j].rx, text, 0))
+    for (j = 0; j < r->nheaders; j++) {
+        Header *h = r->headers + j;
+        /* Explicit requirements override the shared any-style policy; an
+         * explicit empty array permits unstyled structural headings. */
+        int styled = h->has_requires ? (h->requires & flags) == h->requires :
+                     (!r->header_styles || (r->header_styles & flags));
+        if (styled && ds_match(d, h->rx, text, 0))
             return (int)j;
+    }
     return -1;
 }
 static int item_label(Str text) {
