@@ -1,6 +1,8 @@
 # doc2struct
 
-doc2struct is an algorithm that can parse documents fast on one thread.
+doc2struct is an algorithm that can parse documents fast on one thread. It has been released in alpha, due to demand. Will be polished.
+
+![Parsing a document](image.png)
 
 **installation**
 python 
@@ -61,7 +63,7 @@ pl.from_dicts(
 
 
 
-![Parsing a document](image.png)
+
 
 It emits a compact data structure, preserving nesting, suitable for storage as parquet.
 
