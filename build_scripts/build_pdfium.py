@@ -164,10 +164,16 @@ compute_build_timestamp = "//build/doc2struct_timestamp.py"
         # host's libstdc++ ABI. Bullseye's glibc is below the 2.34 release floor.
         args=args.replace('use_custom_libcxx = false','use_custom_libcxx = true')
         args+=f'target_cpu = "{cpu}"\nuse_sysroot = true\n'
+        # Official x64 builds enable CFI by default, but standalone PDFium
+        # does not include Chromium's tools/cfi/ignores.txt.
+        args+='is_cfi = false\nuse_cfi_icall = false\n'
         for arch in sorted({'amd64','arm64' if cross else 'amd64'}):
             subprocess.run([sys.executable,'build/linux/sysroot_scripts/install-sysroot.py','--arch='+arch],cwd=SOURCE,env=env,check=True)
     elif sys.platform=='darwin':
         args+='mac_deployment_target = "14.0"\n'
+        # Official builds request dSYMs even with symbol_level=0. Avoid the
+        # dsymutil hook dependency when building this stripped runtime.
+        args+='enable_dsyms = false\n'
     if sys.platform=='win32':
         vswhere=Path(os.environ.get('ProgramFiles(x86)','C:/Program Files (x86)'))/'Microsoft Visual Studio/Installer/vswhere.exe'
         vs=Path(subprocess.check_output([str(vswhere),'-latest','-products','*','-requires','Microsoft.VisualStudio.Component.VC.Tools.x86.x64','-property','installationPath'],text=True).strip())
