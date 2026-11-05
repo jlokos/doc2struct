@@ -19,50 +19,16 @@ cmake --build build --config Release
 cmake --install build --config Release --prefix ./install
 ```
 
-**functions**
-
+**quickstart**
 ```python
-# Parse directly to standardized text
-standardized_text = parse_html(html, rules=None)
-standardized_text = parse_pdf(pdf, rules=None)
-standardized_text = parse_text(text, rules=None)
-standardized_text = parse_partialsgml(text, rules=None)
-
-# Convert to instructions
-instructions = convert_html_to_instructions(html, rules=None)
-instructions = convert_pdf_to_instructions(pdf, rules=None)
-instructions = convert_text_to_instructions(text, rules=None)
-instructions = convert_partialsgml_to_instructions(text, rules=None)
-
-# Convert instructions to standardized text
-standardized_text = convert_instructions_to_standardized_text(
-    instructions, rules=None
-)
-
-# Visualize
-visualize_instructions(
-    instructions,
-    filename="instructions_visualization.html",
-    open_browser=True,
-)
-visualize_standardized_text(
-    standardized_text,
-    filename="standardized_text_visualization.html",
-    open_browser=True,
-)
-
-# Saving output
-import polars as pl
-from doc2struct import parse_html
+from doc2struct import parse_html, visualize_standardized_text
+# e.g. https://www.sec.gov/Archives/edgar/data/1318605/000095017022000796/tsla-20211231.htm
+with open("10-K.html","rb") as f:
+    html = f.read()
 
 standardized_text = parse_html(html, rules="SEC:10-K")
-pl.from_dicts(
-    standardized_text, infer_schema_length=None
-).write_parquet("document.parquet")
+visualize_standardized_text(standardized_text)
 ```
-
-
-
 
 
 It emits a compact data structure, preserving nesting, suitable for storage as parquet.
@@ -134,6 +100,49 @@ It supports customizable rulesets, that allow the algorithm to be easily tweaked
 The ideal use case for doc2struct is as part of a [document router](https://datamule.xyz/articles/exploring-document-parsing-router-architecture/) that uses LLMs to tweak the rulesets depending on the corpus.
 
 The first usecase of doc2struct will be processing every SEC html, pdf, and text file (10TB+) for about $0.04 (AWS spot estimate using c6gd.medium).
+
+## Functions
+
+```python
+# Parse directly to standardized text
+standardized_text = parse_html(html, rules=None)
+standardized_text = parse_pdf(pdf, rules=None)
+standardized_text = parse_text(text, rules=None)
+standardized_text = parse_partialsgml(text, rules=None)
+
+# Convert to instructions
+instructions = convert_html_to_instructions(html, rules=None)
+instructions = convert_pdf_to_instructions(pdf, rules=None)
+instructions = convert_text_to_instructions(text, rules=None)
+instructions = convert_partialsgml_to_instructions(text, rules=None)
+
+# Convert instructions to standardized text
+standardized_text = convert_instructions_to_standardized_text(
+    instructions, rules=None
+)
+
+# Visualize
+visualize_instructions(
+    instructions,
+    filename="instructions_visualization.html",
+    open_browser=True,
+)
+visualize_standardized_text(
+    standardized_text,
+    filename="standardized_text_visualization.html",
+    open_browser=True,
+)
+
+# Saving output
+import polars as pl
+from doc2struct import parse_html
+
+standardized_text = parse_html(html, rules="SEC:10-K")
+pl.from_dicts(
+    standardized_text, infer_schema_length=None
+).write_parquet("document.parquet")
+```
+
 
 ## Modalities supported
 
