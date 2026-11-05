@@ -21,12 +21,15 @@ level are joined with spaces. Type/level changes and all other types end the blo
 Adjacent titles at the same level also join when their first source runs match
 in style flags, font size and indentation. This runs before table-title inheritance
 and retains the first title's classification and every source item's metadata.
+
+Extra columns, including class and standardized_title, are always opt-in. A text
+column can extract a regex capture or use value to emit a literal/replacement.
+Header rules establish structure before column patterns examine the output rows.
 """
 from ._engine import _native, prepare
 
 DEFAULT_COLUMNS = ('id', 'level', 'type', 'text', 'matrix', 'cleaned', 'preamble', 'footnotes', 'postamble')
-RULE_COLUMNS = ('id', 'level', 'type', 'class', 'standardized_title', 'text', 'matrix', 'cleaned',
-                'preamble', 'footnotes', 'postamble')
+RULE_COLUMNS = DEFAULT_COLUMNS
 
 
 def convert_instructions_to_standardized_text(instructions, rules=None):

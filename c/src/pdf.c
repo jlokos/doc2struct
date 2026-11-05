@@ -234,7 +234,7 @@ static int copy_bridge_glyphs(void *context, const DS_PDF_GLYPH *glyphs, size_t 
     return 1;
 }
 
-int doc2struct_pdf_visit(Str input, const char *password, doc2struct_pdf_page_sink sink,
+int doc2struct_pdf_visit(Str input, doc2struct_pdf_page_sink sink,
                         void *context, doc2struct_error *error) {
     FPDF_DOCUMENT document = NULL;
     FPDF_PAGE page = NULL;
@@ -246,10 +246,10 @@ int doc2struct_pdf_visit(Str input, const char *password, doc2struct_pdf_page_si
     if (!input.p || !input.n || !sink) return fail(error, "PDF bytes and a page sink are required");
     LOCK();
     if (!engine_path) { fail(error, "initialize the required PDFium library first"); goto done; }
-    document = p_FPDF_LoadMemDocument64(input.p, input.n, password);
+    document = p_FPDF_LoadMemDocument64(input.p, input.n, NULL);
     if (!document) {
         unsigned long code = p_FPDF_GetLastError();
-        fail(error, code == FPDF_ERR_PASSWORD ? "incorrect or missing PDF password" : "cannot open PDF document");
+        fail(error, code == FPDF_ERR_PASSWORD ? "PDF requires a password; password-protected documents are unsupported" : "cannot open PDF document");
         goto done;
     }
     pages = p_FPDF_GetPageCount(document);
@@ -307,7 +307,7 @@ done:
 }
 
 static Document *parse_pdf(ParserContext *parser, Str input, const Rules *rules,
-                           const char *password, doc2struct_error *error) {
+                           doc2struct_error *error) {
     PdfLayout layout = {0};
     Document *document;
     int ok;
@@ -324,7 +324,7 @@ static Document *parse_pdf(ParserContext *parser, Str input, const Rules *rules,
         document->collect_hrefs = rules->collect_hrefs;
     }
     ok = (!rules || ds_flow_begin(document)) &&
-         doc2struct_pdf_visit(input,password,ds_pdf_layout,&layout,error) &&
+         doc2struct_pdf_visit(input,ds_pdf_layout,&layout,error) &&
          (!rules || (ds_flow_finish(document) && ds_standardize(document,rules)));
     ds_arena_free(&layout.scratch);
     ds_pool_clear(&layout.pool);
@@ -336,11 +336,12 @@ static Document *parse_pdf(ParserContext *parser, Str input, const Rules *rules,
     return document;
 }
 Document *doc2struct_parse_pdf(ParserContext *parser, Str input, const Rules *rules,
-                               const char *password, doc2struct_error *error) {
+                               doc2struct_error *error) {
     if (!rules) { fail(error,"rules are required"); return NULL; }
-    return parse_pdf(parser,input,rules,password,error);
+    return parse_pdf(parser,input,rules,error);
 }
-Document *doc2struct_pdf_instructions(ParserContext *parser, Str input, const char *password,
+Document *doc2struct_pdf_instructions(ParserContext *parser, Str input, const Rules *rules,
                                       doc2struct_error *error) {
-    return parse_pdf(parser,input,NULL,password,error);
+    if (!rules) { fail(error,"rules are required"); return NULL; }
+    return parse_pdf(parser,input,NULL,error);
 }

@@ -1,5 +1,18 @@
 {
   "name": "default",
+  "adapters": {
+    "html": {
+      "hide_hidden_attr": false,
+      "hide_visibility": false,
+      "max_span": 100
+    },
+    "text": {
+      "tab_size": 8
+    },
+    "partialsgml": {
+      "tab_size": 8
+    }
+  },
   "headers": [],
   "header_styles": ["bold", "all_caps", "proper_case"],
   "remove": {

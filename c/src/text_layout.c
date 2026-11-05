@@ -1,4 +1,5 @@
 #include "doc2struct.h"
+#include "scan.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -9,8 +10,9 @@ typedef struct { size_t column; unsigned flags; } TextStyle;
 typedef struct {
     Str text, raw;
     size_t source, indent, width;
+    size_t nfields, numbers, ntabs;
     unsigned flags;
-    int kind, rule;
+    int kind, rule, analyzed, has_digit;
     Vec markers;
     Vec styles;
 } TextLine;
@@ -20,9 +22,15 @@ typedef struct {
     size_t tab_size, source;
     unsigned flags;
     int partial, comment;
+    int stream, pending_active;
+    Run pending;
 } TextLayout;
 
 static int horizontal(uint32_t c) { return c != '\n' && c != '\r' && c != '\f' && ds_space(c); }
+static inline uint32_t text_utf8(const char *p, size_t n, size_t *step) {
+    if (n && (unsigned char)p[0] < 128) { *step = 1; return (unsigned char)p[0]; }
+    return ds_utf8(p, n, step);
+}
 static int tag_is(Str name, const char *word) {
     size_t i, n = strlen(word);
     if (name.n != n) return 0;
@@ -57,15 +65,27 @@ static int finish_line(TextLayout *layout, Str raw, Vec markers, Vec styles, uns
     TextLine line = {0};
     size_t i, k, used = 0, column = 0, right = 0, capacity = raw.n, leading = 1;
     char *buffer;
+    if (ds_text_span(raw.p, raw.n, 0) == raw.n) {
+        line.text = line.raw = raw;
+        line.source = layout->source;
+        line.indent = ds_text_spaces(raw.p, raw.n);
+        line.width = raw.n;
+        while (line.width && raw.p[line.width - 1] == ' ') line.width--;
+        line.flags = flags; line.markers = markers; line.styles = styles;
+        line.kind = markers.n && !line.width ? TL_MARKERS : TL_TEXT;
+        line.rule = rule_line(raw);
+        return add_line(layout, line);
+    }
     for (i = 0; i < raw.n; i++) if (raw.p[i] == '\t') {
         if (capacity > SIZE_MAX - layout->tab_size) goto large;
         capacity += layout->tab_size;
+        line.ntabs++;
     }
     if (capacity == SIZE_MAX) goto large;
     buffer = ds_alloc_uninit(arena, capacity + 1);
     if (!buffer) return 0;
     for (i = 0; i < raw.n; i += k) {
-        uint32_t c = ds_utf8(raw.p + i, raw.n - i, &k);
+        uint32_t c = text_utf8(raw.p + i, raw.n - i, &k);
         if (c == '\t') {
             size_t spaces = layout->tab_size - column % layout->tab_size;
             memset(buffer + used, ' ', spaces); used += spaces; column += spaces;
@@ -104,6 +124,7 @@ static int scan_line(TextLayout *layout, Str raw) {
     unsigned flags = layout->flags;
     char *buffer;
     if (!layout->partial) return finish_line(layout, raw, markers, styles, 0);
+    if (!layout->comment && !memchr(raw.p, '<', raw.n)) return finish_line(layout, raw, markers, styles, flags);
     buffer = ds_alloc_uninit(arena, raw.n + 1);
     if (!buffer) return 0;
     while (i < raw.n) {
@@ -117,6 +138,14 @@ static int scan_line(TextLayout *layout, Str raw) {
             while (i < raw.n && !(raw.n - i >= 3 && !memcmp(raw.p + i, "-->", 3))) i++;
             if (i < raw.n) { layout->comment = 0; i += 3; }
             continue;
+        }
+        {
+            size_t run = ds_text_span(raw.p + i, raw.n - i, 1);
+            if (run) {
+                memcpy(buffer + used, raw.p + i, run);
+                used += run; i += run; column += run;
+                continue;
+            }
         }
         if (raw.p[i] != '<') goto literal;
         end = i + 1;
@@ -172,7 +201,7 @@ static int scan_line(TextLayout *layout, Str raw) {
         i = end + 1; continue;
 literal:
         while (i < literal_end) {
-            uint32_t c = ds_utf8(raw.p + i, raw.n - i, &k);
+            uint32_t c = text_utf8(raw.p + i, raw.n - i, &k);
             memcpy(buffer + used, raw.p + i, k); used += k; i += k;
             column += c == '\t' ? layout->tab_size - column % layout->tab_size : 1;
         }
@@ -182,33 +211,46 @@ literal:
 static int scan(TextLayout *layout, Str input) {
     size_t start = 0, i;
     if (input.n >= 3 && !memcmp(input.p, "\xef\xbb\xbf", 3)) start = 3;
-    for (i = start; i < input.n; i++) {
+    i = start;
+    while (i < input.n) {
+        i += ds_text_line_end(input.p + i, input.n - i);
+        if (i == input.n) break;
         char c = input.p[i];
-        if (c != '\n' && c != '\r' && c != '\f') continue;
         if (!scan_line(layout, (Str){input.p + start, i - start})) return 0;
         if (c == '\f' && !event(layout, TL_PAGE)) return 0;
         if (c == '\r' && i + 1 < input.n && input.p[i + 1] == '\n') i++;
-        layout->source++; start = i + 1;
+        layout->source++; start = ++i;
     }
     return scan_line(layout, (Str){input.p + start, input.n - start});
 }
-static size_t fields(TextLine *line, int *numeric) {
+static void analyze_line(TextLine *line) {
     Str text = line->text;
     size_t i = 0, count = 0;
-    int active = 0;
-    if (numeric) *numeric = 0;
+    int active = 0, digit = 0;
+    if (line->analyzed) return;
     while (i < text.n) {
         if (text.p[i] == ' ') {
-            size_t start = i;
-            while (i < text.n && text.p[i] == ' ') i++;
-            if (i - start >= 2) active = 0;
+            size_t spaces = ds_text_spaces(text.p + i, text.n - i);
+            line->numbers += digit; digit = 0;
+            i += spaces;
+            if (spaces >= 2) active = 0;
         } else {
             if (!active) { count++; active = 1; }
-            if (numeric && text.p[i] >= '0' && text.p[i] <= '9') *numeric = 1;
+            if (text.p[i] >= '0' && text.p[i] <= '9') digit = line->has_digit = 1;
             i++;
         }
     }
-    return count;
+    line->numbers += digit;
+    line->nfields = count; line->analyzed = 1;
+}
+static size_t fields(TextLine *line, int *numeric) {
+    analyze_line(line);
+    if (numeric) *numeric = line->has_digit;
+    return line->nfields;
+}
+static size_t line_numbers(TextLine *line) {
+    analyze_line(line);
+    return line->numbers;
 }
 static size_t numeric_tokens(Str text) {
     size_t i, count = 0;
@@ -221,37 +263,41 @@ static size_t numeric_tokens(Str text) {
 }
 static int cuts_word(TextLine *line, size_t cut) {
     size_t byte = 0, column = 0, k;
+    if (line->text.n == line->width) return cut && cut < line->text.n && line->text.p[cut] != ' ' && line->text.p[cut - 1] != ' ';
     while (byte < line->text.n && column < cut) {
-        ds_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
+        text_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
     }
     return byte && byte < line->text.n && line->text.p[byte] != ' ' && line->text.p[byte - 1] != ' ';
 }
 /* Casing is evidence for short headings, not for every line of an uppercase
  * paragraph. Ignore enumeration and punctuation when checking title case. */
 static unsigned casing(Document *d, Str text) {
-    char *words;
-    size_t i, used = 0;
-    int space = 0;
+    size_t i = 0, words = 0;
+    (void)d;
     text = ds_strip(text, 1);
     if (!text.n || text.n > 200) return 0;
     if (ds_upper(text)) return ALL_CAPS;
     /* A leading lowercase stop word is a continuation, not a title. */
     if (text.p[0] >= 'a' && text.p[0] <= 'z') return 0;
-    words = ds_alloc_uninit(&d->arena, text.n + 1);
-    if (!words) return 0;
-    for (i = 0; i < text.n; i++) {
+    while (i < text.n) {
+        size_t start = i;
         unsigned char c = (unsigned char)text.p[i];
-        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
-            if (space && used) words[used++] = ' ';
-            words[used++] = (char)c; space = 0;
-        } else if (c >= 128) return 0;
-        else space = 1;
+        if (c >= 128) return 0;
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) { i++; continue; }
+        while (i < text.n && ((text.p[i] >= 'A' && text.p[i] <= 'Z') || (text.p[i] >= 'a' && text.p[i] <= 'z'))) i++;
+        if (!(c >= 'A' && c <= 'Z') && !ds_stop_word((Str){text.p + start, i - start})) return 0;
+        words++;
     }
-    words[used] = 0;
-    return ds_proper((Str){words, used}) ? PROPER_CASE : 0;
+    return words ? PROPER_CASE : 0;
 }
-static Run *emit(Document *d, TextLine *line, size_t block, Str text, unsigned flags) {
-    Run *run = doc2struct_add_run(d);
+static Run *emit(TextLayout *layout, TextLine *line, size_t block, Str text, unsigned flags) {
+    Document *d = layout->document;
+    Run *run;
+    if (layout->stream) {
+        if (layout->pending_active && !ds_flow_run(d, &layout->pending)) return NULL;
+        layout->pending = (Run){0}; layout->pending_active = 1;
+        run = &layout->pending;
+    } else run = doc2struct_add_run(d);
     if (!run) return NULL;
     run->block = block; run->line = line->source; run->text = text;
     run->rowspan = run->colspan = 1;
@@ -259,7 +305,7 @@ static Run *emit(Document *d, TextLine *line, size_t block, Str text, unsigned f
     run->has_indent = 1; run->indent = (double)line->indent * 8;
     return run;
 }
-static int styled_line(Document *d, TextLine *line, size_t block, unsigned inferred) {
+static int styled_line(TextLayout *layout, TextLine *line, size_t block, unsigned inferred) {
     TextStyle *styles = line->styles.p;
     Str trimmed = ds_strip(line->text, 1);
     size_t i, byte = 0, column = 0, first = (size_t)(trimmed.p - line->text.p), last = first + trimmed.n;
@@ -267,12 +313,12 @@ static int styled_line(Document *d, TextLine *line, size_t block, unsigned infer
     for (i = 0; i <= line->styles.n; i++) {
         size_t start = byte, limit = i < line->styles.n ? styles[i].column : SIZE_MAX, k;
         while (byte < line->text.n && column < limit) {
-            ds_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
+            text_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
         }
         if (start < first) start = first;
         if (byte > start && start < last) {
             Str text = {line->text.p + start, (byte < last ? byte : last) - start};
-            if (!emit(d, line, block, text, flags | inferred)) return 0;
+            if (!emit(layout, line, block, text, flags | inferred)) return 0;
         }
         if (i < line->styles.n) flags = styles[i].flags;
     }
@@ -324,18 +370,18 @@ static int plain(TextLayout *layout, size_t start, size_t end, size_t *block) {
         for (k = i; k < j; k++) {
             Str value = ds_strip(lines[k].text, 1);
             if (lines[k].styles.n) {
-                if (!styled_line(d, lines + k, *block, flags & ~line->flags)) return 0;
+                if (!styled_line(layout, lines + k, *block, flags & ~line->flags)) return 0;
                 continue;
             }
             if (k > i) value = ds_cat(&d->arena, ds_str(" "), value);
-            if (!value.p || !emit(d, lines + k, *block, value, flags)) return 0;
+            if (!value.p || !emit(layout, lines + k, *block, value, flags)) return 0;
         }
         (*block)++;
         i = j + underline;
     }
     return !d->arena.error[0];
 }
-typedef struct { Str text; size_t left, right; int number; } GridWord;
+typedef struct { Str text; size_t left, right; int number, letters, fraction, currency; } GridWord;
 typedef struct { Vec words; } GridLine;
 typedef struct { TextLayout *layout; Vec rows; size_t width; } TextGrid;
 static int grid_currency(Str text) {
@@ -359,15 +405,35 @@ static int grid_words(TextGrid *grid, size_t start, size_t end) {
             if (line->text.p[byte] == ' ') { byte++; column++; continue; }
             first = byte; left = column;
             while (byte < line->text.n && line->text.p[byte] != ' ') {
-                ds_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
+                text_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
             }
             word = ds_push(&d->arena, &row->words, sizeof(GridWord));
             if (!word) return 0;
             *word = (GridWord){{line->text.p + first, byte - first}, left, column, 0};
             word->number = numeric_tokens(word->text) != 0;
+            word->fraction = memchr(word->text.p, '/', word->text.n) != NULL;
+            word->currency = grid_currency(word->text);
+            if (!word->number) {
+                size_t q;
+                word->letters = ds_upper(word->text);
+                for (q = 0; !word->letters && q < word->text.n; q++)
+                    if ((word->text.p[q] >= 'a' && word->text.p[q] <= 'z') ||
+                        (word->text.p[q] >= 'A' && word->text.p[q] <= 'Z')) word->letters = 1;
+            }
         }
     }
     return 1;
+}
+static size_t grid_word_start(GridLine *row, size_t column, int boundary) {
+    GridWord *words = row->words.p;
+    size_t first = 0, end = row->words.n;
+    while (first < end) {
+        size_t middle = first + (end - first) / 2;
+        int before = boundary ? words[middle].right <= column : words[middle].left < column;
+        if (before) first = middle + 1;
+        else end = middle;
+    }
+    return first;
 }
 static double grid_boundary(TextGrid *grid, size_t cut) {
     GridLine *rows = grid->rows.p;
@@ -375,7 +441,8 @@ static double grid_boundary(TextGrid *grid, size_t cut) {
     double cost = 0;
     for (i = 0; i < grid->rows.n; i++) {
         GridWord *words = rows[i].words.p;
-        for (j = 0; j < rows[i].words.n; j++) {
+        j = grid_word_start(rows + i, cut, 1);
+        if (j < rows[i].words.n) {
             GridWord *word = words + j;
             if (word->left < cut && cut < word->right) cost += 1000;
             /* One space inside a textual phrase is weak evidence for a cell
@@ -384,7 +451,7 @@ static double grid_boundary(TextGrid *grid, size_t cut) {
                 word->left - words[j - 1].right == 1 && !word->number && !words[j - 1].number)
                 cost += 60;
             if (j && words[j - 1].right <= cut && cut <= word->left &&
-                grid_currency(words[j - 1].text) && word->number) cost += 100;
+                words[j - 1].currency && word->number) cost += 100;
         }
     }
     return cost;
@@ -397,20 +464,14 @@ static double grid_cell(TextGrid *grid, size_t left, size_t right) {
         GridWord *words = rows[i].words.p, *previous = NULL;
         size_t numbers = 0;
         int letters = 0;
-        for (j = 0; j < rows[i].words.n; j++) {
+        for (j = grid_word_start(rows + i, left, 0); j < rows[i].words.n; j++) {
             GridWord *word = words + j;
-            if (word->left < left || word->right > right) continue;
+            if (word->right > right) break;
             if (previous && word->left - previous->right >= 2 &&
-                !(grid_currency(previous->text) && word->number)) cost += 40;
+                !(previous->currency && word->number)) cost += 40;
             /* Currency symbols and a mixed fraction belong with their number. */
-            if (word->number && !(previous && previous->number && memchr(word->text.p, '/', word->text.n))) numbers++;
-            if (!word->number && ds_upper(word->text)) letters = 1;
-            if (!word->number) {
-                size_t q;
-                for (q = 0; q < word->text.n; q++)
-                    if ((word->text.p[q] >= 'a' && word->text.p[q] <= 'z') ||
-                        (word->text.p[q] >= 'A' && word->text.p[q] <= 'Z')) letters = 1;
-            }
+            if (word->number && !(previous && previous->number && word->fraction)) numbers++;
+            letters |= word->letters;
             previous = word;
         }
         if (numbers > 1 && !letters) cost += (double)(numbers - 1) * 35;
@@ -471,6 +532,25 @@ static int marker_grid(TextLayout *layout, size_t start, size_t end, size_t widt
     size_t i, j, pass;
     if (!grid_words(&grid, start, end)) return 0;
     if (!grid.rows.n || grid.rows.n > 512 || width > 4096) return 1;
+    /* Zero data cost at the exact markers is a proven minimum of the same
+     * nonnegative objective used below, including its distance-to-marker term.
+     * Removal/insertion cannot improve it either. Keep all ambiguous cases on
+     * the full fitter, including phrasing, currency and missing subcolumns. */
+    if (hints.n >= 2 && hints.n <= 128) {
+        size_t *cuts = hints.p, left = 0;
+        for (j = 1; j < hints.n; j++) {
+            if (cuts[j] <= left + 1 || cuts[j] >= width || grid_boundary(&grid, cuts[j]) != 0 ||
+                grid_cell(&grid, left, cuts[j]) != 0) break;
+            left = cuts[j];
+        }
+        if (j == hints.n && grid_cell(&grid, left, width) == 0) {
+            size_t *result = ds_alloc(&layout->document->arena, hints.n * sizeof(size_t));
+            if (!result) return 0;
+            memcpy(result + 1, cuts + 1, (hints.n - 1) * sizeof(size_t));
+            out->p = result; out->n = out->cap = hints.n;
+            return 1;
+        }
+    }
     if (!grid_fit(&grid, hints, out) || !out->n) return !layout->document->arena.error[0];
     rows = grid.rows.p;
     /* A marker may also describe a formatting column that has no independent
@@ -541,7 +621,7 @@ static int columns(TextLayout *layout, size_t start, size_t end, Vec *out, int m
         if (line->kind != TL_TEXT || line->rule || !ds_strip(line->text, 1).n) continue;
         if (fields(line, &numeric) >= 2) {
             rows++; numbers += numeric;
-            if (numeric_tokens(line->text) >= 2) quantitative++;
+            if (line_numbers(line) >= 2) quantitative++;
         }
         if (line->width > width) width = line->width;
     }
@@ -557,9 +637,9 @@ static int columns(TextLayout *layout, size_t start, size_t end, Vec *out, int m
         TextLine *line = lines + i;
         size_t byte = 0, column = 0, k;
         if (line->kind != TL_TEXT || line->rule || fields(line, NULL) < 2 ||
-            (quantitative >= 3 && numeric_tokens(line->text) < 2)) continue;
+            (quantitative >= 3 && line_numbers(line) < 2)) continue;
         while (byte < line->text.n) {
-            uint32_t c = ds_utf8(line->text.p + byte, line->text.n - byte, &k);
+            uint32_t c = text_utf8(line->text.p + byte, line->text.n - byte, &k);
             if (c != ' ') occupied[column] = 1;
             byte += k; column++;
         }
@@ -628,7 +708,7 @@ static int table_header(TextLayout *layout, size_t start, size_t end, size_t blo
         if (line->kind != TL_TEXT || line->rule) continue;
         while (byte < line->text.n) {
             size_t left = column, first = byte, a = n, b = 0;
-            if (line->text.p[byte] != '-') { ds_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++; continue; }
+            if (line->text.p[byte] != '-') { text_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++; continue; }
             while (byte < line->text.n && line->text.p[byte] == '-') { byte++; column++; }
             if (byte - first < 3) continue;
             for (j = 0; j < n; j++) {
@@ -669,7 +749,7 @@ static int table_header(TextLayout *layout, size_t start, size_t end, size_t blo
             if (line->text.p[byte] == ' ') { byte++; column++; continue; }
             first = byte; left = column;
             while (byte < line->text.n && line->text.p[byte] != ' ') {
-                ds_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
+                text_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
             }
             word = (Str){line->text.p + first, byte - first};
             if (rule_line(word)) continue;
@@ -696,7 +776,7 @@ static int table_header(TextLayout *layout, size_t start, size_t end, size_t blo
                 Str text = pieces[q].text;
                 Run *run;
                 if (q && pieces[q - 1].line == pieces[q].line) text = ds_cat(&d->arena, ds_str(" "), text);
-                if (!text.p || !(run = emit(d, pieces[q].line, block, text, pieces[q].line->flags | BOLD))) return 0;
+                if (!text.p || !(run = emit(layout, pieces[q].line, block, text, pieces[q].line->flags | BOLD))) return 0;
                 run->in_table = 1; run->row = *rows; run->col = all[j].col; run->colspan = all[j].span;
             }
             emitted = 1;
@@ -714,7 +794,7 @@ static int table(TextLayout *layout, size_t start, size_t end, size_t *block, Ve
         data_start = i + 1; marked = 1;
     }
     if (!marked) for (i = start; i < end; i++)
-        if (lines[i].kind == TL_TEXT && !lines[i].rule && numeric_tokens(lines[i].text)) { data_start = i; break; }
+        if (lines[i].kind == TL_TEXT && !lines[i].rule && line_numbers(lines + i)) { data_start = i; break; }
     if (marked) {
         if (!table_header(layout, start, data_start, *block, *cols, &row)) return 0;
         if (row) first = data_start;
@@ -732,7 +812,7 @@ static int table(TextLayout *layout, size_t start, size_t end, size_t *block, Ve
                     /* A standalone label can exceed its column's display
                      * width without implying several populated data cells. */
                     while (target + 1 < cols->n && cuts[target + 1] <= line->indent) target++;
-                    run = emit(d, line, *block, ds_strip(line->text, 1), line->flags | casing(d, ds_strip(line->text, 1)));
+                    run = emit(layout, line, *block, ds_strip(line->text, 1), line->flags | casing(d, ds_strip(line->text, 1)));
                     if (!run) return 0;
                     run->in_table = 1; run->row = row++; run->col = target;
                     continue;
@@ -740,7 +820,7 @@ static int table(TextLayout *layout, size_t start, size_t end, size_t *block, Ve
                 /* A body row that contradicts the grid stays readable source
                  * text. A fabricated colspan would conceal an invalid fit. */
                 (*block)++;
-                if (!emit(d, line, (*block)++, ds_strip(line->text, 1), line->flags)) return 0;
+                if (!emit(layout, line, (*block)++, ds_strip(line->text, 1), line->flags)) return 0;
                 row = 0;
                 continue;
             }
@@ -750,7 +830,7 @@ static int table(TextLayout *layout, size_t start, size_t end, size_t *block, Ve
             Str text;
             Run *run;
             while (byte < line->text.n && (col + 1 == cols->n || column < cuts[col + 1])) {
-                ds_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
+                text_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
             }
             /* A caption crossing column boundaries is a spanning cell. Never
              * cut through a word just because a lower row has a column there. */
@@ -758,11 +838,11 @@ static int table(TextLayout *layout, size_t start, size_t end, size_t *block, Ve
                    line->text.p[byte] != ' ' && line->text.p[byte - 1] != ' ') {
                 span++;
                 while (byte < line->text.n && (col + span == cols->n || column < cuts[col + span])) {
-                    ds_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
+                    text_utf8(line->text.p + byte, line->text.n - byte, &k); byte += k; column++;
                 }
             }
             text = ds_strip((Str){line->text.p + first, byte - first}, 1);
-            run = emit(d, line, *block, text, line->flags | casing(d, text));
+            run = emit(layout, line, *block, text, line->flags | casing(d, text));
             if (!run) return 0;
             run->in_table = 1; run->row = row; run->col = col; run->colspan = span;
             col += span;
@@ -773,11 +853,6 @@ static int table(TextLayout *layout, size_t start, size_t end, size_t *block, Ve
     return 1;
 }
 typedef struct { size_t end, count, tail, first, second; int records; } Delimited;
-static size_t tabs(Str text) {
-    size_t i, count = 0;
-    for (i = 0; i < text.n; i++) count += text.p[i] == '\t';
-    return count;
-}
 /* Numeric identifier + a fixed-width alphanumeric key + arbitrary payload.
  * This is a layout convention, without any knowledge of NSAR field codes. */
 static int record(Str text, size_t *first, size_t *second) {
@@ -799,7 +874,7 @@ static int record(Str text, size_t *first, size_t *second) {
 static Delimited delimited(TextLayout *layout, size_t start, size_t end) {
     TextLine *lines = layout->lines.p;
     Delimited result = {0};
-    size_t i, count = tabs(lines[start].raw), first = 0, second = 0;
+    size_t i, count = lines[start].ntabs, first = 0, second = 0;
     if (lines[start].kind != TL_TEXT || lines[start].rule) return result;
     if (count < 2 || count > 127 || !lines[start].raw.n || lines[start].raw.p[0] == '\t') {
         if (!record(lines[start].text, &first, &second)) return result;
@@ -809,7 +884,7 @@ static Delimited delimited(TextLayout *layout, size_t start, size_t end) {
         if (result.records) {
             size_t a, b;
             if (!record(lines[i].text, &a, &b) || a != first || b != second) break;
-        } else if (tabs(lines[i].raw) != count || !lines[i].raw.n || lines[i].raw.p[0] == '\t') break;
+        } else if (lines[i].ntabs != count || !lines[i].raw.n || lines[i].raw.p[0] == '\t') break;
     }
     if (i - start < 3) return (Delimited){0};
     result.end = i; result.count = result.records ? 3 : count + 1;
@@ -855,7 +930,7 @@ static int emit_delimited(TextLayout *layout, size_t start, Delimited spec, size
             } else { last = byte = source.n; }
             value = ds_copy(&d->arena, ds_strip((Str){source.p + first, last - first}, 1));
             if (!value.p) return 0;
-            run = emit(d, line, *block, value, line->flags | casing(d, value));
+            run = emit(layout, line, *block, value, line->flags | casing(d, value));
             if (!run) return 0;
             run->in_table = 1; run->row = i - start; run->col = col;
         }
@@ -963,8 +1038,8 @@ static int layout_lines(TextLayout *layout) {
     }
     return plain(layout, pending, layout->lines.n, &block);
 }
-static Document *text_instructions(ParserContext *parser, Str input, size_t tab_size,
-                                   int partial, doc2struct_error *error) {
+static Document *text_document(ParserContext *parser, Str input, const Rules *rules, size_t tab_size,
+                               int partial, doc2struct_error *error) {
     Document *d;
     TextLayout layout = {0};
     if (error) error->message[0] = 0;
@@ -977,15 +1052,36 @@ static Document *text_instructions(ParserContext *parser, Str input, size_t tab_
     if (!d) return NULL;
     if (parser) d->arena.pool = &parser->pool;
     layout.document = d; layout.partial = partial; layout.tab_size = tab_size;
+    layout.stream = rules != NULL;
+    if (rules) {
+        d->retain_table_cells = rules->unwrap_layout;
+        d->collect_hrefs = rules->collect_hrefs;
+    }
     input = ds_input(&d->arena, input);
-    if (input.p && scan(&layout, input) && layout_lines(&layout)) return d;
+    /* One owned backing buffer lets ordinary ASCII lines be borrowed views.
+     * Instruction-only callers can still release their input immediately. */
+    if (input.p) input = ds_copy(&d->arena, input);
+    if (!input.p || !scan(&layout, input) || (rules && !ds_flow_begin(d)) || !layout_lines(&layout)) goto failed;
+    d->no_fonts = 1;
+    if (!rules || ((!layout.pending_active || ds_flow_run(d, &layout.pending)) && ds_flow_finish(d) && ds_standardize(d, rules))) return d;
+failed:
     if (error) snprintf(error->message, sizeof(error->message), "%s", d->arena.error[0] ? d->arena.error : "text layout failed");
     doc2struct_document_free(d);
     return NULL;
 }
-Document *doc2struct_text_instructions(ParserContext *parser, Str input, size_t tab_size, doc2struct_error *error) {
-    return text_instructions(parser, input, tab_size, 0, error);
+Document *doc2struct_text_instructions(ParserContext *parser, Str input, const Rules *rules, doc2struct_error *error) {
+    if (!rules) { if (error) snprintf(error->message, sizeof(error->message), "rules are required"); return NULL; }
+    return text_document(parser, input, NULL, rules->text_tab_size, 0, error);
 }
-Document *doc2struct_partialsgml_instructions(ParserContext *parser, Str input, size_t tab_size, doc2struct_error *error) {
-    return text_instructions(parser, input, tab_size, 1, error);
+Document *doc2struct_partialsgml_instructions(ParserContext *parser, Str input, const Rules *rules, doc2struct_error *error) {
+    if (!rules) { if (error) snprintf(error->message, sizeof(error->message), "rules are required"); return NULL; }
+    return text_document(parser, input, NULL, rules->partialsgml_tab_size, 1, error);
+}
+Document *doc2struct_parse_text(ParserContext *parser, Str input, const Rules *rules, doc2struct_error *error) {
+    if (!rules) { if (error) snprintf(error->message, sizeof(error->message), "rules are required"); return NULL; }
+    return text_document(parser, input, rules, rules->text_tab_size, 0, error);
+}
+Document *doc2struct_parse_partialsgml(ParserContext *parser, Str input, const Rules *rules, doc2struct_error *error) {
+    if (!rules) { if (error) snprintf(error->message, sizeof(error->message), "rules are required"); return NULL; }
+    return text_document(parser, input, rules, rules->partialsgml_tab_size, 1, error);
 }

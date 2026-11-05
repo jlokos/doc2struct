@@ -179,3 +179,43 @@ Str ds_group(Document *d, Str text, unsigned group) {
         return (Str){0};
     return (Str){text.p + o[group * 2], o[group * 2 + 1] - o[group * 2]};
 }
+
+/* Expand only the first match's replacement, without retaining unmatched
+ * subject text. Reuse ds_match's captures; unset optional groups are empty. */
+Str ds_column_replace(Document *d, const Column *column, Str input) {
+    size_t capacity;
+    PCRE2_SIZE used;
+    char *buffer;
+    int rc;
+    uint32_t options = PCRE2_NO_UTF_CHECK | PCRE2_SUBSTITUTE_MATCHED |
+        PCRE2_SUBSTITUTE_EXTENDED | PCRE2_SUBSTITUTE_UNSET_EMPTY |
+        PCRE2_SUBSTITUTE_REPLACEMENT_ONLY | PCRE2_SUBSTITUTE_OVERFLOW_LENGTH;
+    if (!memchr(column->value.p, '\\', column->value.n) &&
+        !memchr(column->value.p, '$', column->value.n)) return column->value;
+    if (column->value.n == SIZE_MAX || input.n > SIZE_MAX - column->value.n - 1) {
+        snprintf(d->arena.error, sizeof(d->arena.error), "column replacement too large");
+        return (Str){0};
+    }
+    capacity = input.n + column->value.n + 1;
+    buffer = ds_alloc_uninit(&d->arena, capacity);
+    if (!buffer) return (Str){0};
+    used = capacity;
+    rc = pcre2_substitute(column->rx->code, (PCRE2_SPTR)input.p, input.n, 0,
+        options, d->match, NULL, (PCRE2_SPTR)column->value.p, column->value.n,
+        (PCRE2_UCHAR *)buffer, &used);
+    if (rc == PCRE2_ERROR_NOMEMORY && used > capacity) {
+        capacity = used;
+        buffer = ds_alloc_uninit(&d->arena, capacity);
+        if (!buffer) return (Str){0};
+        rc = pcre2_substitute(column->rx->code, (PCRE2_SPTR)input.p, input.n, 0,
+            options, d->match, NULL, (PCRE2_SPTR)column->value.p, column->value.n,
+            (PCRE2_UCHAR *)buffer, &used);
+    }
+    if (rc < 0) {
+        PCRE2_UCHAR message[160];
+        pcre2_get_error_message(rc, message, sizeof(message));
+        snprintf(d->arena.error, sizeof(d->arena.error), "column replacement: %s", (char *)message);
+        return (Str){0};
+    }
+    return (Str){buffer, used};
+}

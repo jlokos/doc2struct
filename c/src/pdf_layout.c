@@ -71,8 +71,8 @@ static int emit(PdfLayout *layout, const doc2struct_pdf_page *page, Fragment f,
         run.flags=g[start].flags;
         if(ds_upper(run.text)) run.flags|=ALL_CAPS;
         if(ds_proper(run.text)) run.flags|=PROPER_CASE;
-        run.font=g[start].font*4/3; run.has_font=run.font_float=1;
-        run.indent=fmax(0,f.left)*4/3; run.has_indent=run.indent_float=1;
+        run.font=g[start].font*4/3; run.has_font=1;
+        run.indent=fmax(0,f.left)*4/3; run.has_indent=1;
         run.in_table=table; run.row=row; run.col=col; run.rowspan=run.colspan=1;
         if(layout->stream) {
             if(!ds_flow_run(d,&run)) return 0;

@@ -200,7 +200,6 @@ int main(int argc, char **argv) {
     doc2struct_error error;
     doc2struct_rules *rules = NULL;
     doc2struct_parser *parser = NULL;
-    doc2struct_options options = doc2struct_options_default();
     double total_time = 0;
     uint64_t total_bytes = 0, total_rows = 0;
     size_t i;
@@ -227,7 +226,7 @@ int main(int argc, char **argv) {
         double start;
         if (!data) { path_error("Cannot read file", files.paths[i]); goto done; }
         start = seconds();
-        document = doc2struct_parse(parser, (doc2struct_string){data, size}, rules, options, &error);
+        document = doc2struct_parse(parser, (doc2struct_string){data, size}, rules, &error);
         total_time += seconds() - start;
         if (!document) {
             path_error(error.message, files.paths[i]); free(data); goto done;

@@ -26,7 +26,8 @@ from typing import Optional, Union
 
 from .. import _native
 
-from .types import (CustomColumn, HeaderRule, ListRules, NormalizerOptions, RemoveRules, Rules, TableRules)
+from .types import (AdapterRules, HTMLAdapterRules, TextAdapterRules, CustomColumn, HeaderRule,
+                    ListRules, RemoveRules, Rules, TableRules)
 
 _PACKS = None
 
@@ -88,7 +89,7 @@ def _resolve(source) -> Rules:
 
 
 def merge(base: Rules, extra: Rules) -> Rules:
-    """Append headers/columns; replace nondefault remove/tables/lists/header_styles."""
+    """Append headers/columns; override nondefault adapter fields and rule sections."""
     return Rules.from_dict(json.loads(_native.merge_rules(
         json.dumps(base.to_dict(), allow_nan=False), json.dumps(extra.to_dict(), allow_nan=False))))
 
@@ -101,4 +102,4 @@ def load_rules(source: Union[str, Path, dict, Rules], extend: Optional[Union[str
 
 
 __all__ = ['load_rules', 'merge', 'list_namespaces', 'list_document_types', 'Rules', 'HeaderRule', 'RemoveRules', 'TableRules', 'ListRules',
-           'CustomColumn', 'NormalizerOptions']
+           'CustomColumn', 'AdapterRules', 'HTMLAdapterRules', 'TextAdapterRules']

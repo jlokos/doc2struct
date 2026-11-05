@@ -101,14 +101,42 @@ static int one_of(Str s,const char *const *allowed) {
     size_t i;for(i=0;allowed[i];i++)if(ds_is(s,allowed[i]))return 1;return 0;
 }
 static Rules *compile(JValue *root,doc2struct_error *error) {
-    static const char *const sources[]={"text","href","src","font_size","indent","flags",NULL};
+    static const char *const sources[]={"text","header_title","href","src","font_size","indent","flags",NULL};
     static const char *const dtypes[]={"str","int","bool","list",NULL};
     static const char *const which[]={"first","last","all",NULL};
-    static const char *const reserved[]={"id","level","type","class","standardized_title","text","matrix","cleaned","preamble","footnotes","postamble",NULL};
-    Rules *r=calloc(1,sizeof(*r));JValue *v,*c,*sub,*x;size_t i,j;
+    static const char *const reserved[]={"id","level","type","text","matrix","cleaned","preamble","footnotes","postamble",NULL};
+    static const char *const adapters[]={"html","text","partialsgml",NULL};
+    static const char *const html_fields[]={"hide_hidden_attr","hide_visibility","max_span",NULL};
+    Rules *r=calloc(1,sizeof(*r));JValue *v,*c,*sub,*x,*adapter;size_t i,j;long n;
     if(!r){if(error)snprintf(error->message,sizeof(error->message),"out of memory");return NULL;}
     if(!root||root->type!=J_OBJECT){bad(&r->arena,"rules must be an object");goto fail;}
     if(!field(&r->arena,root,"name",J_STRING,0))goto fail;
+    if(ds_config_get(root,"options")||ds_config_get(root,"tab_size")) {
+        bad(&r->arena,"input settings belong under adapters.html, adapters.text or adapters.partialsgml");goto fail;
+    }
+    sub=field(&r->arena,root,"adapters",J_OBJECT,0);if(!sub)goto fail;
+    for(c=sub->child;c;c=c->next) {
+        if(!one_of(c->key,adapters)){bad(&r->arena,"unknown adapter");goto fail;}
+    }
+    adapter=field(&r->arena,sub,"html",J_OBJECT,0);if(!adapter)goto fail;
+    for(c=adapter->child;c;c=c->next) {
+        if(!one_of(c->key,html_fields)){bad(&r->arena,"unknown HTML adapter setting");goto fail;}
+    }
+    x=field(&r->arena,adapter,"hide_hidden_attr",J_BOOL,0);if(!x)goto fail;r->html.hide_hidden_attr=x->boolean;
+    x=field(&r->arena,adapter,"hide_visibility",J_BOOL,0);if(!x)goto fail;r->html.hide_visibility=x->boolean;
+    n=number(r,field(&r->arena,adapter,"max_span",J_NUMBER,0));
+    if(n<1){bad(&r->arena,"adapters.html.max_span must be positive");goto fail;}
+    r->html.max_span=(size_t)n;
+    for(i=1;i<3;i++) {
+        adapter=field(&r->arena,sub,adapters[i],J_OBJECT,0);if(!adapter)goto fail;
+        for(c=adapter->child;c;c=c->next) {
+            if(!ds_is(c->key,"tab_size")){bad(&r->arena,"unknown text adapter setting");goto fail;}
+        }
+        n=number(r,field(&r->arena,adapter,"tab_size",J_NUMBER,0));
+        if(n<1||n>256){bad(&r->arena,"adapter tab_size must be between 1 and 256");goto fail;}
+        if(i==1)r->text_tab_size=(size_t)n;else r->partialsgml_tab_size=(size_t)n;
+    }
+    if(r->arena.error[0])goto fail;
     v=field(&r->arena,root,"header_styles",J_ARRAY,0);if(!v)goto fail;
     for(c=v->child;c;c=c->next) {
         unsigned bit=ds_style_bit(text(r,c));
@@ -197,12 +225,28 @@ static Rules *compile(JValue *root,doc2struct_error *error) {
             if(x->type!=J_STRING){bad(&r->arena,"column pattern must be a string");goto fail;}
             if(x->text.n){col->rx=ds_regex(r,x->text,1);if(!col->rx)goto fail;}
         }
+        x=field(&r->arena,c,"value",J_STRING,1);
+        if(x) {
+            if(!ds_is(col->source,"text")&&!ds_is(col->source,"header_title")) {
+                bad(&r->arena,"column value requires a text or header_title source");goto fail;
+            }
+            if(!col->rx){bad(&r->arena,"column value requires a nonempty pattern");goto fail;}
+            col->value=text(r,x);
+        }
+        if(r->arena.error[0])goto fail;
         x=ds_config_get(c,"types");
         if(x&&x->type!=J_NULL) {
             if(x->type!=J_ARRAY){bad(&r->arena,"column types must be an array");goto fail;}
             col->ntypes=x->count;col->filter_types=x->count!=0;
             col->types=array(r,x->count,sizeof(Str));if(!col->types)goto fail;
             for(x=x->child,j=0;x;x=x->next,j++)col->types[j]=text(r,x);
+        }
+        x=ds_config_get(c,"classes");
+        if(x&&x->type!=J_NULL) {
+            if(x->type!=J_ARRAY){bad(&r->arena,"column classes must be an array");goto fail;}
+            col->nclasses=x->count;col->filter_classes=x->count!=0;
+            col->classes=array(r,x->count,sizeof(Str));if(!col->classes)goto fail;
+            for(x=x->child,j=0;x;x=x->next,j++)col->classes[j]=text(r,x);
         }
     }
     if(r->arena.error[0])goto fail;
@@ -240,7 +284,7 @@ char *doc2struct_rules_resolve(const char *input,size_t n,int preset,size_t *siz
     ds_arena_free(&arena);return out;
 }
 char *doc2struct_rules_merge_json(Str base_json,Str extra_json,size_t *size,doc2struct_error *error) {
-    Arena a={0};JValue *base,*extra,*defaults,*b,*x,*tail;Rules *r=NULL;
+    Arena a={0};JValue *base,*extra,*defaults,*b,*x,*tail,*adapter,*setting,*default_adapter;Rules *r=NULL;
     Str json={0};char *out=NULL;size_t i;
     static const char *const append[]={"headers","columns"};
     static const char *const replace[]={"remove","tables","lists","header_styles"};
@@ -250,6 +294,18 @@ char *doc2struct_rules_merge_json(Str base_json,Str extra_json,size_t *size,doc2
     if(!base||!extra||!defaults)goto done;
     r=compile(base,error);if(!r)goto done;doc2struct_rules_free(r);
     r=compile(extra,error);if(!r)goto done;doc2struct_rules_free(r);
+    /* Adapter overrides apply per setting, preserving the other adapters and
+     * existing nondefault settings, as when adding just a different tab size. */
+    for(adapter=ds_config_get(extra,"adapters")->child;adapter;adapter=adapter->next) {
+        b=ds_config_get(ds_config_get(base,"adapters"),adapter->key.p);
+        default_adapter=ds_config_get(ds_config_get(defaults,"adapters"),adapter->key.p);
+        for(setting=adapter->child;setting;setting=setting->next) {
+            x=ds_config_get(b,setting->key.p);
+            if(!ds_config_equal(setting,ds_config_get(default_adapter,setting->key.p))) {
+                JValue *next=x->next;*x=*setting;x->next=next;
+            }
+        }
+    }
     for(i=0;i<2;i++) {
         b=ds_config_get(base,append[i]);x=ds_config_get(extra,append[i]);
         if(!b->child)b->child=x->child;

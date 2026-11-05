@@ -282,32 +282,27 @@ Str ds_lower(Arena *a, Str s) {
     p[j] = 0;
     return changed ? (Str){p, j} : s;
 }
+int ds_stop_word(Str word) {
+    size_t j;
+    static const char *stops[] = {"and", "or",  "of",   "the", "in", "on", "at",
+                                  "to",  "for", "with", "by",  "a",  "an", NULL};
+    for (j = 0; stops[j]; j++) {
+        size_t n = strlen(stops[j]), q;
+        if (n != word.n) continue;
+        for (q = 0; q < n; q++)
+            if (tolower((unsigned char)word.p[q]) != stops[j][q]) break;
+        if (q == n) return 1;
+    }
+    return 0;
+}
 int ds_proper(Str s) {
     size_t i = 0, k, start;
     int words = 0;
-    static const char *stops[] = {"and", "or",  "of",   "the", "in", "on", "at",
-                                  "to",  "for", "with", "by",  "a",  "an", NULL};
     while (i < s.n) {
-        size_t j;
-        int stop = 0;
         start = i;
-        while (i < s.n && ((s.p[i] >= 'A' && s.p[i] <= 'Z') || (s.p[i] >= 'a' && s.p[i] <= 'z')))
-            i++;
-        if (i == start)
-            return 0;
-        for (j = 0; stops[j]; j++) {
-            size_t n = strlen(stops[j]), q;
-            if (n != i - start)
-                continue;
-            for (q = 0; q < n; q++)
-                if (tolower((unsigned char)s.p[start + q]) != stops[j][q])
-                    break;
-            if (q == n) {
-                stop = 1;
-                break;
-            }
-        }
-        if (!stop && !(s.p[start] >= 'A' && s.p[start] <= 'Z'))
+        while (i < s.n && ((s.p[i] >= 'A' && s.p[i] <= 'Z') || (s.p[i] >= 'a' && s.p[i] <= 'z'))) i++;
+        if (i == start) return 0;
+        if (!(s.p[start] >= 'A' && s.p[start] <= 'Z') && !ds_stop_word((Str){s.p + start, i - start}))
             return 0;
         words++;
         if (i == s.n)

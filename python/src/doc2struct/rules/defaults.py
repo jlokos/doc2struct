@@ -3,6 +3,12 @@ import json
 from .. import _native
 
 _DEFAULTS = json.loads(_native.defaults_json())
+_ADAPTERS = _DEFAULTS['adapters']
+DEFAULT_HIDE_HIDDEN_ATTR = _ADAPTERS['html']['hide_hidden_attr']
+DEFAULT_HIDE_VISIBILITY = _ADAPTERS['html']['hide_visibility']
+DEFAULT_MAX_SPAN = _ADAPTERS['html']['max_span']
+DEFAULT_TEXT_TAB_SIZE = _ADAPTERS['text']['tab_size']
+DEFAULT_PARTIALSGML_TAB_SIZE = _ADAPTERS['partialsgml']['tab_size']
 DEFAULT_HEADER_STYLES = tuple(_DEFAULTS['header_styles'])
 _REMOVE = _DEFAULTS['remove']
 _TABLES = _DEFAULTS['tables']
@@ -26,5 +32,5 @@ KNOWN_TABLE_STEPS = tuple(_TABLES['steps'])
 KNOWN_STYLES = ('bold', 'italic', 'underline', 'centered', 'all_caps', 'proper_case', 'fake_table')
 
 # columns every output already has; custom columns may not reuse them
-RESERVED_COLUMNS = ('id', 'level', 'type', 'class', 'standardized_title', 'text', 'matrix', 'cleaned', 'preamble',
+RESERVED_COLUMNS = ('id', 'level', 'type', 'text', 'matrix', 'cleaned', 'preamble',
                     'footnotes', 'postamble')

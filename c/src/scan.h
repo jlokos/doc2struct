@@ -48,6 +48,55 @@ static inline unsigned ds_first_bit(unsigned mask) {
 }
 #endif
 
+/* Plain text/partial SGML scanners. Like the HTML scans, these never read
+ * outside the supplied slice; scalar builds use exactly the same predicates. */
+static inline size_t ds_text_line_end(const char *p, size_t n) {
+    size_t i = 0;
+#ifdef DS_SSE2
+    const __m128i lf = _mm_set1_epi8('\n'), cr = _mm_set1_epi8('\r'), ff = _mm_set1_epi8('\f');
+    for (; n - i >= 16; i += 16) {
+        __m128i data = _mm_loadu_si128((const __m128i *)(p + i));
+        unsigned mask = (unsigned)_mm_movemask_epi8(_mm_or_si128(_mm_cmpeq_epi8(data, lf),
+            _mm_or_si128(_mm_cmpeq_epi8(data, cr), _mm_cmpeq_epi8(data, ff))));
+        if (mask) return i + ds_first_bit(mask);
+    }
+#endif
+    for (; i < n; i++) if (p[i] == '\n' || p[i] == '\r' || p[i] == '\f') break;
+    return i;
+}
+static inline size_t ds_text_span(const char *p, size_t n, int markup) {
+    size_t i = 0;
+#ifdef DS_SSE2
+    const __m128i control_end = _mm_set1_epi8(31), zero = _mm_setzero_si128(), lt = _mm_set1_epi8('<');
+    for (; n - i >= 16; i += 16) {
+        __m128i data = _mm_loadu_si128((const __m128i *)(p + i));
+        __m128i special = _mm_or_si128(data, _mm_cmpeq_epi8(_mm_subs_epu8(data, control_end), zero));
+        if (markup) special = _mm_or_si128(special, _mm_cmpeq_epi8(data, lt));
+        {
+            unsigned mask = (unsigned)_mm_movemask_epi8(special);
+            if (mask) return i + ds_first_bit(mask);
+        }
+    }
+#endif
+    for (; i < n; i++) {
+        unsigned char c = (unsigned char)p[i];
+        if (c < 32 || c >= 128 || (markup && c == '<')) break;
+    }
+    return i;
+}
+static inline size_t ds_text_spaces(const char *p, size_t n) {
+    size_t i = 0;
+#ifdef DS_SSE2
+    const __m128i space = _mm_set1_epi8(' ');
+    for (; n - i >= 16; i += 16) {
+        unsigned mask = (unsigned)_mm_movemask_epi8(_mm_cmpeq_epi8(_mm_loadu_si128((const __m128i *)(p + i)), space));
+        if (mask != 0xffffu) return i + ds_first_bit((~mask) & 0xffffu);
+    }
+#endif
+    for (; i < n && p[i] == ' '; i++);
+    return i;
+}
+
 /* Never read beyond the supplied slice: callers need no padding or alignment. */
 static inline size_t ds_nonascii(const char *p, size_t n) {
     size_t i = 0;

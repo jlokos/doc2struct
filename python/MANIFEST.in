@@ -1,5 +1,0 @@
-include build_support.py
-include _native_source/c/vendor/pdfium/LICENSE
-prune src/doc2struct/_pdfium
-recursive-include native *.c
-recursive-include _native_source *.c *.cpp *.h *.json *.py *.md *.txt *.dll *.so *.dylib CMakeLists.txt

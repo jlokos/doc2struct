@@ -13,11 +13,11 @@ try:
 except ImportError as exc:
     raise ImportError(
         'doc2struct requires its C extension. Build it with '
-        '`python -m pip install -e ./python` from the repository root.'
+        '`python -m pip install -e .` from the repository root.'
     ) from exc
 
 _pdfium_suffix = '.dll' if sys.platform == 'win32' else '.dylib' if sys.platform == 'darwin' else '.so'
-_native.pdfium_init(str(Path(__file__).resolve().parent / '_pdfium' / ('doc2struct_pdfium' + _pdfium_suffix)))
+_native.pdfium_init(str(Path(_native.__file__).resolve().parent / '_pdfium' / ('doc2struct_pdfium' + _pdfium_suffix)))
 
 from .rules import Rules, load_rules, list_namespaces
 

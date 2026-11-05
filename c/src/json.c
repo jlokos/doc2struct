@@ -102,8 +102,9 @@ static int cleanup_value(Writer *writer,const Row *row) {
         }
     return literal(writer,"]");
 }
-Str ds_json(const Document *document,int with_rules,Arena *arena) {
-    Writer writer={0};size_t i;writer.arena=arena;
+Str ds_json(Document *document,const Rules *rules,int with_rules,Arena *arena) {
+    Writer writer={0};size_t i,j;writer.arena=arena;
+    (void)with_rules; /* Output columns are declared in rules, independently of this legacy flag. */
     if(!literal(&writer,"["))return(Str){0};
     for(i=0;i<document->rows.n;i++) {
         const Row *row=(const Row*)document->rows.p+i;
@@ -111,15 +112,25 @@ Str ds_json(const Document *document,int with_rules,Arena *arena) {
         if(!literal(&writer,"{\"id\":")||!integer_value(&writer,row->id)||
            !literal(&writer,",\"level\":")||!integer_value(&writer,row->level)||
            !literal(&writer,",\"type\":")||!string_value(&writer,row->type))return(Str){0};
-        if(with_rules && (!literal(&writer,",\"class\":")||!string_value(&writer,row->klass)||
-            !literal(&writer,",\"standardized_title\":")||!string_value(&writer,row->title)))return(Str){0};
         if(!literal(&writer,",\"text\":")||!string_value(&writer,row->text)||
            !literal(&writer,",\"matrix\":")||!matrix_value(&writer,&row->matrix)||
            !literal(&writer,",\"cleaned\":")||!cleanup_value(&writer,row)||
            !literal(&writer,",\"preamble\":")||!string_value(&writer,row->preamble)||
            !literal(&writer,",\"footnotes\":")||!notes_value(&writer,row)||
-           !literal(&writer,",\"postamble\":")||!string_value(&writer,row->postamble)||
-           !literal(&writer,"}"))return(Str){0};
+           !literal(&writer,",\"postamble\":")||!string_value(&writer,row->postamble))return(Str){0};
+        for(j=0;j<rules->ncolumns;j++) {
+            const Column *column=rules->columns+j;
+            Str value={0};
+            if(doc2struct_column_applies(column,row)&&
+               !doc2struct_column_text(document,column,
+                   ds_is(column->source,"header_title")?row->title:row->text,&value)) {
+                snprintf(arena->error,sizeof(arena->error),"%s",doc2struct_document_error(document));
+                return(Str){0};
+            }
+            if(!literal(&writer,",")||!string_value(&writer,column->name)||
+               !literal(&writer,":")||!string_value(&writer,value))return(Str){0};
+        }
+        if(!literal(&writer,"}"))return(Str){0};
     }
     if(!literal(&writer,"]"))return(Str){0};
     writer.data[writer.size]=0;

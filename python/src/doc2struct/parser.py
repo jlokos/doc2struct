@@ -1,14 +1,14 @@
-"""HTML and PDF to standardized rows, with native intermediate storage."""
+"""Document bytes to standardized rows, with native intermediate storage.
+
+Document inputs must be bytes; returned text is str.
+Read file contents with Path.read_bytes() or open(path, 'rb').read().
+"""
 from ._engine import _native, prepare
-from .rules import NormalizerOptions
 
 
-def parse_html(html, rules=None, options=NormalizerOptions()):
-    """Parse HTML, reusing up to 8 MiB of C memory between calls."""
-    return _native.parse_html(
-        html, prepare(rules), rules is not None,
-        options.hide_hidden_attr, options.hide_visibility, options.max_span,
-    )
+def parse_html(html: bytes, rules=None):
+    """Parse HTML bytes using rules.adapters.html, reusing bounded C memory."""
+    return _native.parse_html(html, prepare(rules), rules is not None)
 
 
 def clear_parser_cache():
@@ -16,12 +16,29 @@ def clear_parser_cache():
     _native.clear_parser_cache()
 
 
-def parse_pdf(pdf, rules=None, *, password=None):
+def parse_pdf(pdf: bytes, rules=None):
     """Parse PDF bytes through native extraction, layout, and standardization.
 
     Extracts embedded text; image-only pages require OCR elsewhere.
     """
-    return _native.parse_pdf(pdf, prepare(rules), rules is not None, password)
+    return _native.parse_pdf(pdf, prepare(rules), rules is not None)
+
+
+def parse_text(text: bytes, rules=None):
+    """Parse plain-text bytes directly to standardized rows in C.
+
+    Uses rules.adapters.text.tab_size; encoding matches convert_text_to_instructions.
+    Uses the default parser's bounded native memory cache.
+    """
+    return _native.parse_text(text, prepare(rules), rules is not None)
+
+
+def parse_partialsgml(text: bytes, rules=None):
+    """Parse caller-identified partial SGML bytes to standardized rows in C.
+
+    Uses rules.adapters.partialsgml.tab_size; encoding matches the instruction converter.
+    """
+    return _native.parse_partialsgml(text, prepare(rules), rules is not None)
 
 
 class Parser:
@@ -36,16 +53,20 @@ class Parser:
     def __init__(self, cache_size=8 * 1024 * 1024):
         self._handle = _native.parser_new(cache_size)
 
-    def parse_html(self, html, rules=None, options=NormalizerOptions()):
-        return _native.parse_html(
-            html, prepare(rules), rules is not None,
-            options.hide_hidden_attr, options.hide_visibility, options.max_span,
-            self._handle,
-        )
+    def parse_html(self, html: bytes, rules=None):
+        return _native.parse_html(html, prepare(rules), rules is not None, self._handle)
 
-    def parse_pdf(self, pdf, rules=None, *, password=None):
+    def parse_pdf(self, pdf: bytes, rules=None):
         """Parse PDF bytes using this parser's native memory cache."""
-        return _native.parse_pdf(pdf, prepare(rules), rules is not None, password, self._handle)
+        return _native.parse_pdf(pdf, prepare(rules), rules is not None, self._handle)
+
+    def parse_text(self, text: bytes, rules=None):
+        """Parse plain-text bytes using this parser's native memory cache."""
+        return _native.parse_text(text, prepare(rules), rules is not None, self._handle)
+
+    def parse_partialsgml(self, text: bytes, rules=None):
+        """Parse partial SGML bytes using this parser's native memory cache."""
+        return _native.parse_partialsgml(text, prepare(rules), rules is not None, self._handle)
 
     @property
     def cache_size(self):

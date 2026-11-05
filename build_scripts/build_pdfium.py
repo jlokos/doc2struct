@@ -1,6 +1,6 @@
 """Build the pinned PDFium text-object frontend and bundle its runtime.
 
-Run: python tools/build_pdfium.py --fetch
+Run: python build_scripts/build_pdfium.py --fetch
 Use --source to reuse an existing pinned PDFium checkout. Requires the platform
 C++ toolchain; release builds use ThinLTO without profile training.
 """
@@ -38,7 +38,11 @@ def fetch():
             subprocess.run(['git','-C',str(path),'remote','add','origin',url],check=True,env=env)
             subprocess.run(['git','-C',str(path),'fetch','--depth','1','origin',revision],check=True,env=env)
             subprocess.run(['git','-C',str(path),'checkout','--detach','FETCH_HEAD'],check=True,env=env)
-    (workspace/'.gclient').write_text("solutions = [{'name':'pdfium','url':'https://pdfium.googlesource.com/pdfium.git','managed':False,'custom_vars':{'checkout_configuration':'minimal'}}]\ntarget_os=[]\n")
+        actual=subprocess.check_output(['git','-C',str(path),'rev-parse','HEAD'],text=True,env=env).strip()
+        if actual!=revision: raise RuntimeError('Unexpected source revision in '+str(path)+': '+actual)
+    solution=dict(name=SOURCE.name,url='https://pdfium.googlesource.com/pdfium.git',managed=False,
+                  custom_vars={'checkout_configuration':'minimal'})
+    (workspace/'.gclient').write_text('solutions = '+repr([solution])+'\ntarget_os=[]\n')
     subprocess.run([sys.executable,str(depot/'gclient.py'),'sync','--no-history','--nohooks','-j','8'],
                    cwd=workspace,env=env,check=True)
     # Minimal checkout omits this dependency, although GN still loads its test target.
@@ -56,8 +60,7 @@ def replace(path, old, new):
     if new in text:
         return
     if old not in text:
-        assert new in text, (path,old)
-        return
+        raise RuntimeError('Pinned PDFium build input changed unexpectedly: '+str(path))
     path.write_text(text.replace(old,new,1))
 
 
@@ -69,12 +72,13 @@ def runtime_key():
     return ('macos' if sys.platform=='darwin' else 'linux')+'_'+arch
 
 
-def bundle(binary, args):
-    dll=ctypes.CDLL(str(binary.resolve()))
-    dll.DS_PDF_BridgeVersion.restype=ctypes.c_uint
-    if dll.DS_PDF_BridgeVersion()!=1:
-        raise RuntimeError('Unexpected PDFium bridge ABI')
-    target=HERE/'runtime'/runtime_key()
+def bundle(binary, args, key, *, cross=False):
+    if not cross:
+        dll=ctypes.CDLL(str(binary.resolve()))
+        dll.DS_PDF_BridgeVersion.restype=ctypes.c_uint
+        if dll.DS_PDF_BridgeVersion()!=1:
+            raise RuntimeError('Unexpected PDFium bridge ABI')
+    target=HERE/'runtime'/key
     target.mkdir(parents=True,exist_ok=True)
     shutil.copy2(binary,target/('doc2struct_pdfium'+binary.suffix))
     notices=target/'licenses'
@@ -85,7 +89,7 @@ def bundle(binary, args):
     parts=[]
     dependencies=['abseil-cpp','agg23','bigint','brotli','cpu_features','dragonbox',
         'fast_float','fp16','freetype','harfbuzz','highway','icu','lcms','libc++',
-        'libc++abi','libjpeg_turbo','libopenjpeg','libpng','libtiff','llvm-libc',
+        'libc++abi','libjpeg_turbo','libopenjpeg','libpng','libtiff','libunwind','llvm-libc',
         'NotoSansBengali2','NotoSansBengali3','NotoSansCJK','simdutf','zlib']
     for name in dependencies:
         for path in sorted((SOURCE/'third_party'/name).rglob('*')):
@@ -93,7 +97,7 @@ def bundle(binary, args):
                 parts.append(str(path.relative_to(SOURCE))+'\n\n'+path.read_text(encoding='utf-8',errors='replace'))
     (notices/'third_party.txt').write_text('\n\n'.join(parts),encoding='utf-8')
     metadata=dict(origin='doc2struct',major=149,minor=0,build=7825,patch=0,
-        revision=PDFIUM_REVISION,bridge_abi=1,platform=runtime_key(),
+        revision=PDFIUM_REVISION,bridge_abi=1,platform=key,
         sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),gn_args=args)
     (target/'version.json').write_text(json.dumps(metadata,indent=2)+'\n')
     print('Bundled '+str(target),flush=True)
@@ -104,8 +108,14 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source',type=Path,default=SOURCE)
     parser.add_argument('--fetch',action='store_true')
+    parser.add_argument('--target-cpu',choices=('x64','arm64'),help='Linux target; ARM is cross-compiled with the pinned Debian sysroot')
+    parser.add_argument('--jobs',type=int,default=4)
     options=parser.parse_args()
     SOURCE=options.source.resolve()
+    if options.jobs < 1: parser.error('--jobs must be positive')
+    if options.target_cpu and sys.platform!='linux': parser.error('--target-cpu is supported only on Linux')
+    if sys.platform=='linux' and platform.machine().lower() not in ('x86_64','amd64'):
+        parser.error('The pinned Chromium Linux toolchain runs on x86-64; cross-compile ARM using --target-cpu arm64')
     if options.fetch: fetch()
     revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=SOURCE,text=True).strip()
     if revision!=PDFIUM_REVISION: raise RuntimeError('Unexpected PDFium source revision: '+revision)
@@ -122,13 +132,6 @@ def main():
         'config("pdfium_public_config") {\n  defines = [ "FPDF_SHARED_LIBRARY" ]')
     replace(SOURCE/'public/fpdfview.h','#if defined(COMPONENT_BUILD)\n',
         '#if defined(COMPONENT_BUILD) || defined(FPDF_SHARED_LIBRARY)\n')
-    # Remove streaming hooks when reusing the research checkout. The default
-    # frontend only visits completed page objects and needs no parser patches.
-    path=SOURCE/'core/fpdfapi/page/cpdf_streamcontentparser.cpp'
-    contents=path.read_text().replace('// Experimental callbacks are unset for every normal PDFium parse.\nbool (*ds_pdf_text_sink)(CPDF_TextObject*) = nullptr;\nvoid (*ds_pdf_form_sink)() = nullptr;\n\n','')
-    contents=contents.replace('    if (!ds_pdf_text_sink || !ds_pdf_text_sink(pText.get()))\n      object_holder_->AppendPageObject(std::move(pText));','    object_holder_->AppendPageObject(std::move(pText));')
-    contents=contents.replace('\n    if (ds_pdf_form_sink) ds_pdf_form_sink();','')
-    if path.read_text()!=contents: path.write_text(contents)
     args='''is_debug = false
 is_component_build = false
 is_official_build = true
@@ -151,6 +154,20 @@ compute_build_timestamp = "//build/doc2struct_timestamp.py"
     (SOURCE/'build/doc2struct_timestamp.py').write_text('from pathlib import Path\nprint((Path(__file__).parent / "util/LASTCHANGE.committime").read_text().strip())\n')
     env=dict(os.environ,DEPOT_TOOLS_WIN_TOOLCHAIN='0',DEPOT_TOOLS_UPDATE='0')
     env['PATH']=str(SOURCE.parent/'depot_tools')+os.pathsep+str(Path(sys.executable).parent)+os.pathsep+env['PATH']
+    key=runtime_key()
+    cross=False
+    if sys.platform=='linux':
+        cpu=options.target_cpu or 'x64'
+        cross=cpu=='arm64'
+        key='linux_'+('arm64' if cross else 'x86_64')
+        # Statically link Chromium's libc++ instead of inheriting the build
+        # host's libstdc++ ABI. Bullseye's glibc is below the 2.34 release floor.
+        args=args.replace('use_custom_libcxx = false','use_custom_libcxx = true')
+        args+=f'target_cpu = "{cpu}"\nuse_sysroot = true\n'
+        for arch in sorted({'amd64','arm64' if cross else 'amd64'}):
+            subprocess.run([sys.executable,'build/linux/sysroot_scripts/install-sysroot.py','--arch='+arch],cwd=SOURCE,env=env,check=True)
+    elif sys.platform=='darwin':
+        args+='mac_deployment_target = "14.0"\n'
     if sys.platform=='win32':
         vswhere=Path(os.environ.get('ProgramFiles(x86)','C:/Program Files (x86)'))/'Microsoft Visual Studio/Installer/vswhere.exe'
         vs=Path(subprocess.check_output([str(vswhere),'-latest','-products','*','-requires','Microsoft.VisualStudio.Component.VC.Tools.x86.x64','-property','installationPath'],text=True).strip())
@@ -170,7 +187,7 @@ compute_build_timestamp = "//build/doc2struct_timestamp.py"
         env['vs'+version+'_install']=str(vs)
         env['GYP_MSVS_OVERRIDE_PATH']=str(vs)
         env['GYP_MSVS_VERSION']=version
-    output='out/doc2struct_lto'
+    output='out/doc2struct_'+key
     destination=SOURCE/output
     destination.mkdir(parents=True,exist_ok=True)
     (destination/'args.gn').write_text(args)
@@ -178,9 +195,9 @@ compute_build_timestamp = "//build/doc2struct_timestamp.py"
     suffix='.exe' if sys.platform=='win32' else ''
     subprocess.run([sys.executable,'build/util/lastchange.py','-o','build/util/LASTCHANGE'],cwd=SOURCE,env=env,check=True)
     subprocess.run([str(SOURCE/f'buildtools/{host}/gn{suffix}'),'gen',output],cwd=SOURCE,env=env,check=True)
-    subprocess.run([str(SOURCE/f'third_party/ninja/ninja{suffix}'),'-C',output,'pdfium','-j','8'],cwd=SOURCE,env=env,check=True)
+    subprocess.run([str(SOURCE/f'third_party/ninja/ninja{suffix}'),'-C',output,'pdfium','-j',str(options.jobs)],cwd=SOURCE,env=env,check=True)
     library='pdfium.dll' if sys.platform=='win32' else 'libpdfium.dylib' if sys.platform=='darwin' else 'libpdfium.so'
-    bundle(destination/library,args)
+    bundle(destination/library,args,key,cross=cross)
 
 
 if __name__=='__main__': main()

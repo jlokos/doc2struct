@@ -1,0 +1,291 @@
+name: Build and release
+
+# Manual runs build downloadable artifacts without publishing anything.
+# A version tag publishes only after every wheel and native SDK has passed.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Check tag against the public C version
+        shell: python
+        run: |
+          import os, pathlib, re
+          header = pathlib.Path('c/include/doc2struct/doc2struct.h').read_text()
+          version = re.search(r'#define DOC2STRUCT_VERSION "([^"]+)"', header).group(1)
+          if os.environ['GITHUB_REF'].startswith('refs/tags/'):
+              assert os.environ['GITHUB_REF_NAME'] == 'v' + version, 'Tag must match DOC2STRUCT_VERSION'
+          print('Building doc2struct ' + version)
+
+  pdfium:
+    needs: version
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            runtime: linux_x86_64
+            args: --target-cpu x64
+          - runner: ubuntu-24.04
+            runtime: linux_arm64
+            args: --target-cpu arm64
+          - runner: windows-2022
+            runtime: win_amd64
+            args: ""
+          - runner: macos-14
+            runtime: macos_arm64
+            args: ""
+          - runner: macos-15-intel
+            runtime: macos_x86_64
+            args: ""
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install Linux build prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libglib2.0-dev
+      - uses: actions/cache@v4
+        id: runtime-cache
+        with:
+          path: c/vendor/pdfium/runtime/${{ matrix.runtime }}
+          key: pdfium-${{ matrix.runner }}-${{ matrix.runtime }}-${{ hashFiles('build_scripts/build_pdfium.py', 'c/vendor/pdfium/bridge.cpp', 'c/vendor/pdfium/bridge.h') }}
+      - name: Build pinned private PDFium once per platform
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        run: python build_scripts/build_pdfium.py --fetch --jobs 4 ${{ matrix.args }}
+      - name: Validate engine bundle
+        shell: bash
+        run: |
+          extra=""
+          if [ "${{ matrix.runtime }}" = linux_arm64 ]; then extra="--no-load"; fi
+          python build_scripts/validate_pdfium.py c/vendor/pdfium/runtime/${{ matrix.runtime }}/doc2struct_pdfium.* $extra
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdfium-${{ matrix.runtime }}
+          path: c/vendor/pdfium/runtime/${{ matrix.runtime }}/
+          if-no-files-found: error
+
+  wheels:
+    needs: pdfium
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            runtime: linux_x86_64
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            runtime: linux_arm64
+            arch: aarch64
+          - runner: windows-2022
+            runtime: win_amd64
+            arch: AMD64
+          - runner: macos-14
+            runtime: macos_arm64
+            arch: arm64
+          - runner: macos-15-intel
+            runtime: macos_x86_64
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pdfium-${{ matrix.runtime }}
+          path: c/vendor/pdfium/runtime/${{ matrix.runtime }}
+      - uses: pypa/cibuildwheel@v4.3.5
+        env:
+          CIBW_ARCHS: ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.runtime }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  native:
+    needs: pdfium
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            runtime: linux_x86_64
+            platform: linux_x86_64
+            container: quay.io/pypa/manylinux_2_34_x86_64
+          - runner: ubuntu-24.04-arm
+            runtime: linux_arm64
+            platform: linux_aarch64
+            container: quay.io/pypa/manylinux_2_34_aarch64
+          - runner: windows-2022
+            runtime: win_amd64
+            platform: win_amd64
+          - runner: macos-14
+            runtime: macos_arm64
+            platform: macos_arm64
+          - runner: macos-15-intel
+            runtime: macos_x86_64
+            platform: macos_x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/download-artifact@v4
+        with:
+          name: pdfium-${{ matrix.runtime }}
+          path: c/vendor/pdfium/runtime/${{ matrix.runtime }}
+      - name: Package Linux SDK and CLI on their target architecture
+        if: runner.os == 'Linux'
+        run: >-
+          docker run --rm -v "$PWD:/project" -w /project ${{ matrix.container }}
+          /opt/python/cp314-cp314/bin/python build_scripts/package_native.py
+          --platform ${{ matrix.platform }}
+      - name: Package Windows or macOS SDK and CLI
+        if: runner.os != 'Linux'
+        run: python build_scripts/package_native.py --platform ${{ matrix.platform }}
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "14.0"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  sdist:
+    needs: pdfium
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pdfium-*
+          path: build/runtimes
+      - name: Include all platform engines in the source distribution
+        shell: python
+        run: |
+          import pathlib, shutil
+          for bundle in pathlib.Path('build/runtimes').glob('pdfium-*'):
+              key = bundle.name.removeprefix('pdfium-')
+              shutil.copytree(bundle, pathlib.Path('c/vendor/pdfium/runtime') / key, dirs_exist_ok=True)
+      - run: python -m pip install build
+      - run: python -m build --sdist
+      - name: Build and exercise a wheel from the isolated source archive
+        shell: bash
+        run: |
+          mkdir build/source-check
+          tar -xzf dist/doc2struct-*.tar.gz -C build/source-check --strip-components=1
+          python -m pip install ./build/source-check
+          python build_scripts/smoke_release.py --python
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  verify-python:
+    needs: [wheels, native, sdist]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - run: python -m pip install twine
+      - run: python -m twine check --strict dist/*
+
+  release-assets:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: verify-python
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          merge-multiple: true
+          path: artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: artifacts
+      - name: Write release checksums
+        shell: python
+        run: |
+          import hashlib, pathlib
+          files = sorted(pathlib.Path('artifacts').iterdir())
+          lines = [hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name for p in files]
+          pathlib.Path('artifacts/SHA256SUMS').write_text('\n'.join(lines) + '\n')
+      - name: Publish GitHub release downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" artifacts/* --clobber
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes artifacts/*
+          fi
+
+  publish-pypi:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [release-assets]
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/p/doc2struct
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      # Configure doc2struct's PyPI Trusted Publisher for this repository,
+      # workflow release.yml, environment pypi. No long-lived API token needed.
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true

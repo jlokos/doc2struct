@@ -10,15 +10,17 @@ from .defaults import (DEFAULT_HEADER_STYLES, DEFAULT_FOOTNOTE_LINES, DEFAULT_FO
                        DEFAULT_PREAMBLE_LINES, DEFAULT_REPEAT_THRESHOLD, KNOWN_STYLES, KNOWN_TABLE_STEPS,
                        RESERVED_COLUMNS, STANDARD_REMOVE, DEFAULT_SINGLE_ROW_TO_TEXT, DEFAULT_PAGE_LABEL_REGEX,
                        DEFAULT_TITLE_FROM_SECTION, DEFAULT_UNWRAP_LAYOUT, DEFAULT_ANNOTATION_EXCLUDE_REGEX,
-                       DEFAULT_LIST_GAP_ROWS, DEFAULT_LIST_TAIL_ROWS)
+                       DEFAULT_LIST_GAP_ROWS, DEFAULT_LIST_TAIL_ROWS, DEFAULT_HIDE_HIDDEN_ATTR,
+                       DEFAULT_HIDE_VISIBILITY, DEFAULT_MAX_SPAN, DEFAULT_TEXT_TAB_SIZE,
+                       DEFAULT_PARTIALSGML_TAB_SIZE)
 
 
-# -------------------------------------------------------------------------------------------- normalizer
+# ---------------------------------------------------------------------------------------------- adapters
 @dataclass(frozen=True)
-class NormalizerOptions:
-    hide_hidden_attr: bool = False   # also hide elements with the `hidden` attribute
-    hide_visibility: bool = False    # also hide visibility:hidden|collapse
-    max_span: int = 100              # clamp rowspan/colspan
+class HTMLAdapterRules:
+    hide_hidden_attr: bool = DEFAULT_HIDE_HIDDEN_ATTR   # also hide elements with the `hidden` attribute
+    hide_visibility: bool = DEFAULT_HIDE_VISIBILITY    # also hide visibility:hidden|collapse
+    max_span: int = DEFAULT_MAX_SPAN                    # clamp rowspan/colspan
 
     def to_dict(self):
         return dict(self.__dict__)
@@ -26,6 +28,35 @@ class NormalizerOptions:
     @classmethod
     def from_dict(cls, d):
         return cls(**d)
+
+
+@dataclass(frozen=True)
+class TextAdapterRules:
+    tab_size: int = DEFAULT_TEXT_TAB_SIZE
+
+    def to_dict(self):
+        return dict(self.__dict__)
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**d)
+
+
+@dataclass(frozen=True)
+class AdapterRules:
+    html: HTMLAdapterRules = field(default_factory=HTMLAdapterRules)
+    text: TextAdapterRules = field(default_factory=TextAdapterRules)
+    partialsgml: TextAdapterRules = field(default_factory=lambda: TextAdapterRules(DEFAULT_PARTIALSGML_TAB_SIZE))
+
+    def to_dict(self):
+        return {'html': self.html.to_dict(), 'text': self.text.to_dict(),
+                'partialsgml': self.partialsgml.to_dict()}
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(html=HTMLAdapterRules.from_dict(d.get('html', {})),
+                   text=TextAdapterRules.from_dict(d.get('text', {})),
+                   partialsgml=TextAdapterRules(tab_size=d.get('partialsgml', {}).get('tab_size', DEFAULT_PARTIALSGML_TAB_SIZE)))
 
 
 # ------------------------------------------------------------------------------------ standardized text
@@ -128,11 +159,13 @@ class ListRules:
 @dataclass(frozen=True)
 class CustomColumn:
     name: str                          # must not reuse a default column name
-    source: str                        # 'text' or one of: href, src, font_size, indent, flags
+    source: str                        # text, header_title, href, src, font_size, indent, flags
     dtype: str = 'str'                 # str | int | bool | list
-    pattern: Optional[str] = None      # source 'text': case-insensitive regex, group 1 (else the whole match)
+    pattern: Optional[str] = None      # text/header_title: case-insensitive regex, group 1 (else whole match)
     which: str = 'first'               # first | last | all (all gives a list)
     types: Optional[Tuple[str, ...]] = None   # only for these row types; default: every type except table
+    classes: Optional[Tuple[str, ...]] = None # only for these row classes; empty/None means unrestricted
+    value: Optional[str] = None        # optional replacement: literals, capture references, \\L...\\E
 
     def to_dict(self):
         d = {'name': self.name, 'source': self.source, 'dtype': self.dtype, 'which': self.which}
@@ -140,12 +173,17 @@ class CustomColumn:
             d['pattern'] = self.pattern
         if self.types is not None:
             d['types'] = list(self.types)
+        if self.classes is not None:
+            d['classes'] = list(self.classes)
+        if self.value is not None:
+            d['value'] = self.value
         return d
 
     @classmethod
     def from_dict(cls, d):
         return cls(d['name'], d['source'], d.get('dtype', 'str'), d.get('pattern'), d.get('which', 'first'),
-                   tuple(d['types']) if d.get('types') is not None else None)
+                   tuple(d['types']) if d.get('types') is not None else None,
+                   tuple(d['classes']) if d.get('classes') is not None else None, d.get('value'))
 
 
 @dataclass
@@ -157,6 +195,7 @@ class Rules:
     columns: List[CustomColumn] = field(default_factory=list)
     lists: ListRules = field(default_factory=ListRules)
     header_styles: Tuple[str, ...] = DEFAULT_HEADER_STYLES  # any listed style; empty disables the shared gate
+    adapters: AdapterRules = field(default_factory=AdapterRules)
 
     def validate(self):
         _native.prepare_rules(json.dumps(self.to_dict(), ensure_ascii=False, allow_nan=False))
@@ -165,7 +204,8 @@ class Rules:
     def to_dict(self):
         return {'name': self.name, 'headers': [h.to_dict() for h in self.headers], 'remove': self.remove.to_dict(),
                 'tables': self.tables.to_dict(), 'columns': [c.to_dict() for c in self.columns],
-                'lists': self.lists.to_dict(), 'header_styles': list(self.header_styles)}
+                'lists': self.lists.to_dict(), 'header_styles': list(self.header_styles),
+                'adapters': self.adapters.to_dict()}
 
     @classmethod
     def from_dict(cls, d):
@@ -175,4 +215,5 @@ class Rules:
                    tables=TableRules.from_dict(d.get('tables', {})),
                    columns=[CustomColumn.from_dict(c) for c in d.get('columns', ())],
                    lists=ListRules.from_dict(d.get('lists', {})),
-                   header_styles=tuple(d.get('header_styles', DEFAULT_HEADER_STYLES))).validate()
+                   header_styles=tuple(d.get('header_styles', DEFAULT_HEADER_STYLES)),
+                   adapters=AdapterRules.from_dict(d.get('adapters', {}))).validate()

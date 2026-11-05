@@ -69,7 +69,10 @@ typedef struct {
     TokenChunk *first, *last;
     size_t n;
 } TokenBuffer;
-typedef doc2struct_options Options;
+typedef struct {
+    int hide_hidden_attr, hide_visibility;
+    size_t max_span;
+} Options;
 typedef struct doc2struct_regex {
     pcre2_code *code;
     unsigned groups;
@@ -89,6 +92,8 @@ typedef struct {
 typedef doc2struct_column Column;
 typedef struct doc2struct_rules {
     Arena arena;
+    Options html;
+    size_t text_tab_size, partialsgml_tab_size;
     Regex *regexes;
     Header *headers;
     size_t nheaders;
@@ -157,6 +162,7 @@ typedef struct doc2struct_document {
     int skip_text, skip_blank;
     int retain_table_cells;
     int collect_hrefs;
+    int no_fonts;
     TokenBuffer tokens;
     Map styles, tags;
     pcre2_match_data *match;
@@ -182,6 +188,7 @@ Str ds_lower(Arena *, Str);
 int ds_space(uint32_t);
 int ds_upper(Str);
 int ds_proper(Str);
+int ds_stop_word(Str);
 int ds_phone(Str);
 uint32_t ds_utf8(const char *, size_t, size_t *);
 Str ds_input(Arena *, Str);
@@ -202,20 +209,21 @@ int ds_list_blocks(Document *);
 int ds_list_continuations(Document *, const Rules *);
 int ds_keep_href(Document *, Vec **, Str);
 int ds_append_hrefs(Document *, Vec **, const Vec *);
-int ds_parse(Document *, Str, const Rules *, Options);
+int ds_parse(Document *, Str, const Rules *);
 /* Contexts have one owner and no worker threads. Initialize once; free each
  * document before destroying its context. Clear releases only cached blocks. */
 void ds_parser_init(ParserContext *, size_t);
-int ds_parser_parse(ParserContext *, Document *, Str, const Rules *, Options);
+int ds_parser_parse(ParserContext *, Document *, Str, const Rules *);
 void ds_parser_clear(ParserContext *);
 int ds_flow_begin(Document *);
 int ds_flow_run(Document *, const Run *);
 int ds_flow_finish(Document *);
-Str ds_json(const Document *, int, Arena *);
+Str ds_json(Document *, const Rules *, int, Arena *);
 int ds_tables(Document *, const Rules *);
 Regex *ds_regex(Rules *, Str, int);
 int ds_match(Document *, Regex *, Str, int);
 Str ds_group(Document *, Str, unsigned);
+Str ds_column_replace(Document *, const Column *, Str);
 void ds_rules_free(Rules *);
 void ds_document_free(Document *);
 unsigned ds_style_bit(Str);

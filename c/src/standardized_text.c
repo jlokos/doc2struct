@@ -212,12 +212,10 @@ static int table_line(Document *d, Run *runs, size_t n, Line *out) {
                 items[i].hrefs = c->hrefs;
                 if (c->font) {
                     items[i].run.font = c->font->font;
-                    items[i].run.font_float = c->font->font_float;
                     items[i].run.has_font = 1;
                 }
                 if (c->indent) {
                     items[i].run.indent = c->indent->indent;
-                    items[i].run.indent_float = c->indent->indent_float;
                     items[i].run.has_indent = 1;
                 }
             }
@@ -271,11 +269,9 @@ static int table_line(Document *d, Run *runs, size_t n, Line *out) {
             item->hrefs = c->hrefs;
             if (c->font) {
                 item->run.font = c->font->font;
-                item->run.font_float = c->font->font_float;
             }
             if (c->indent) {
                 item->run.indent = c->indent->indent;
-                item->run.indent_float = c->indent->indent_float;
             }
         }
         out->items = items;
@@ -375,6 +371,14 @@ static int group(Document *d, Vec *lines) {
     return !d->arena.error[0];
 }
 static Str line_text(Document *, Item *, size_t);
+static Str clean_lower(Document *d, Item *item, Str *cached) {
+    if (cached && cached->p) return *cached;
+    {
+        Str text = ds_lower(&d->arena, ds_strip(item->run.text, 1));
+        if (cached) *cached = text;
+        return text;
+    }
+}
 static double font_stats(Document *, Vec *, int *);
 static int semantic_heading(const Run *run) {
     return run->tag.n == 2 && run->tag.p[0] == 'h' &&
@@ -384,15 +388,33 @@ static int clean(Document *d, const Rules *r, Vec *lines) {
     Map counts = {0}, labels = {0};
     Vec out = {0};
     Line *all = lines->p;
+    Str *lower = NULL;
+    size_t *offsets = NULL;
     size_t i, j, k, distinct_labels = 0;
     int dominant = 0;
     double common = r->page_label ? font_stats(d, lines, &dominant) : 0;
+    /* Within cleanup the original item slices are immutable. Cache only this
+     * pass's lowercase views, without enlarging every persistent Item/Line. */
+    if (d->no_fonts && lines->n && (r->repeat_threshold || r->page_label)) {
+        size_t count = 0;
+        offsets = ds_alloc_uninit(&d->arena, lines->n * sizeof(size_t));
+        if (!offsets) return 0;
+        for (i = 0; i < lines->n; i++) {
+            offsets[i] = count;
+            if (all[i].nitems > SIZE_MAX - count) return 0;
+            count += all[i].nitems;
+        }
+        if (count > SIZE_MAX / sizeof(Str)) return 0;
+        lower = ds_alloc(&d->arena, count * sizeof(Str));
+        if (!lower) return 0;
+    }
     for (i = 0; r->page_label && i < lines->n; i++) {
         Line *line = all + i;
         Str text;
         if (line->matrix.nr || line->listitem || !line->nitems || image(line->items))
             continue;
-        text = ds_lower(&d->arena, ds_strip(line_text(d, line->items, line->nitems), 1));
+        text = line->nitems == 1 ? clean_lower(d, line->items, lower ? lower + offsets[i] : NULL) :
+               ds_lower(&d->arena, ds_strip(line_text(d, line->items, line->nitems), 1));
         if (ds_match(d, r->page_label, text, 0) && !ds_map_get(&labels, text)) {
             if (!ds_map_put(&d->arena, &labels, text, line->items))
                 return 0;
@@ -404,7 +426,7 @@ static int clean(Document *d, const Rules *r, Vec *lines) {
             continue;
         for (j = 0; j < all[i].nitems; j++) {
             Item *it = all[i].items + j;
-            Str text = ds_lower(&d->arena, ds_strip(it->run.text, 1));
+            Str text = clean_lower(d, it, lower ? lower + offsets[i] + j : NULL);
             size_t *count;
             if (!text.n || image(it) || all[i].listitem)
                 continue;
@@ -432,7 +454,8 @@ static int clean(Document *d, const Rules *r, Vec *lines) {
             int big = dominant && first->has_font && first->font > 1.2 * common;
             int small = dominant && first->has_font && first->font < common;
             if (!big && (small || distinct_labels >= 3)) {
-                Str text = ds_lower(&d->arena, ds_strip(line_text(d, line.items, line.nitems), 1));
+                Str text = line.nitems == 1 ? clean_lower(d, line.items, lower ? lower + offsets[i] : NULL) :
+                           ds_lower(&d->arena, ds_strip(line_text(d, line.items, line.nitems), 1));
                 page_label = ds_match(d, r->page_label, text, 0);
             }
         }
@@ -442,7 +465,7 @@ static int clean(Document *d, const Rules *r, Vec *lines) {
             size_t *count;
             int redundant = 0;
             if (!image(&it)) {
-                text = ds_lower(&d->arena, ds_strip(it.run.text, 1));
+                text = clean_lower(d, &it, lower ? lower + offsets[i] + j : NULL);
                 count = ds_map_get(&counts, text);
                 redundant = page_label || (count && r->repeat_threshold &&
                     (r->repeat_threshold < 0 || *count >= (size_t)r->repeat_threshold));
@@ -481,6 +504,7 @@ static double font_stats(Document *d, Vec *lines, int *dominant) {
     double common = 0;
     Line *all = lines->p;
     *dominant = 0;
+    if (d->no_fonts) return 0;
     for (i = 0; i < lines->n; i++)
         if (all[i].redundant)
             eligible--;

@@ -2,6 +2,7 @@
 #include "scan.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 typedef struct {
     Str text;
@@ -9,11 +10,14 @@ typedef struct {
 } Part;
 
 typedef struct {
+    Str tag;
+    size_t block, first_line;
+    int in_table;
     size_t row, col, rs, cs, line, records, parts, head, tail, bytes;
     Str text, href, image_src;
     double font, indent;
     unsigned flags;
-    int has_font, has_indent, font_float, indent_float;
+    int has_font, has_indent;
     Vec *hrefs;
 } FlowCell;
 
@@ -22,7 +26,7 @@ typedef struct {
     Vec items, cells, parts;
     size_t block;
     size_t max_row, max_col, last_row, last_col;
-    int active, table, has_coordinate;
+    int active, table, has_coordinate, unordered;
 } Flow;
 
 static int image(const Item *item) { return item->run.src.p != NULL; }
@@ -180,10 +184,16 @@ static int table_run(Flow *flow, const Run *run) {
         }
     }
     if (!cell) {
+        if (flow->cells.n && (run->row < cells[flow->cells.n - 1].row ||
+            (run->row == cells[flow->cells.n - 1].row && run->col < cells[flow->cells.n - 1].col))) flow->unordered = 1;
         cell = ds_push(&d->arena, &flow->cells, sizeof(FlowCell));
         if (!cell)
             return 0;
         *cell = (FlowCell){0};
+        cell->tag = run->tag;
+        cell->block = run->block;
+        cell->first_line = run->line;
+        cell->in_table = run->in_table;
         cell->row = run->row;
         cell->col = run->col;
         cell->rs = run->rowspan;
@@ -193,12 +203,10 @@ static int table_run(Flow *flow, const Run *run) {
     if (run->has_font) {
         cell->has_font = 1;
         cell->font = run->font;
-        cell->font_float = run->font_float;
     }
     if (run->has_indent) {
         cell->has_indent = 1;
         cell->indent = run->indent;
-        cell->indent_float = run->indent_float;
     }
     if (run->href.p)
         cell->href = run->href;
@@ -235,12 +243,29 @@ static Str cell_text(Flow *flow, FlowCell *cell) {
     return ds_strip((Str){text, position}, 1);
 }
 
+static int compare_cell(const void *a, const void *b) {
+    const FlowCell *x = a, *y = b;
+    if (x->row != y->row) return x->row < y->row ? -1 : 1;
+    return (x->col > y->col) - (x->col < y->col);
+}
+static Run cell_run(const FlowCell *cell) {
+    Run run = {0};
+    run.block = cell->block; run.line = cell->first_line; run.tag = cell->tag;
+    run.in_table = cell->in_table;
+    run.row = cell->row; run.col = cell->col;
+    run.rowspan = cell->rs; run.colspan = cell->cs;
+    run.text = cell->text; run.href = cell->href; run.flags = cell->flags;
+    run.font = cell->font; run.indent = cell->indent;
+    run.has_font = cell->has_font; run.has_indent = cell->has_indent;
+    return run;
+}
 static int table_finish(Flow *flow, Line *line) {
     Document *d = flow->document;
     FlowCell *cells = flow->cells.p, **grid;
     size_t i, j, y, x, nr = flow->max_row, nc = flow->max_col, meaningful = 0, last = 0;
     if (!flow->cells.n)
         return 1;
+    if (flow->unordered) qsort(cells, flow->cells.n, sizeof(FlowCell), compare_cell);
     for (i = 0; i < flow->cells.n; i++) {
         FlowCell *cell = cells + i;
         cell->text = cell_text(flow, cell);
@@ -277,20 +302,8 @@ static int table_finish(Flow *flow, Line *line) {
             for (i = 0; i < flow->cells.n; i++) {
                 FlowCell *cell = cells + i;
                 Run *run = &items[i].run;
-                run->text = cell->text;
+                *run = cell_run(cell);
                 run->src = cell->image_src;
-                run->row = cell->row;
-                run->col = cell->col;
-                run->rowspan = cell->rs;
-                run->colspan = cell->cs;
-                run->flags = cell->flags;
-                run->href = cell->href;
-                run->font = cell->font;
-                run->indent = cell->indent;
-                run->has_font = cell->has_font;
-                run->has_indent = cell->has_indent;
-                run->font_float = cell->font_float;
-                run->indent_float = cell->indent_float;
                 items[i].hrefs = cell->hrefs;
             }
             if (!ds_list_table(d, line, items, flow->cells.n))
@@ -325,16 +338,8 @@ static int table_finish(Flow *flow, Line *line) {
             if (!cell || !cell->text.n)
                 continue;
             item = line->items + i++;
+            item->run = cell_run(cell);
             item->fake_table = 1;
-            item->run.text = cell->text;
-            item->run.href = cell->href;
-            item->run.flags = cell->flags;
-            item->run.font = cell->font;
-            item->run.indent = cell->indent;
-            item->run.has_font = cell->has_font;
-            item->run.has_indent = cell->has_indent;
-            item->run.font_float = cell->font_float;
-            item->run.indent_float = cell->indent_float;
             item->hrefs = cell->hrefs;
         }
     } else if (meaningful) {
@@ -384,7 +389,7 @@ static int finish_block(Flow *flow) {
     }
     flow->items.n = flow->cells.n = flow->parts.n = 0;
     flow->max_row = flow->max_col = 0;
-    flow->has_coordinate = 0;
+    flow->has_coordinate = flow->unordered = 0;
     flow->active = 0;
     return !d->arena.error[0];
 }

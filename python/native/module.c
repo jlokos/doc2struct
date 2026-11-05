@@ -4,7 +4,6 @@
 typedef doc2struct_string Str;
 typedef doc2struct_document Document;
 typedef doc2struct_rules Rules;
-typedef doc2struct_options Options;
 typedef doc2struct_run Run;
 typedef doc2struct_token Token;
 typedef doc2struct_attributes Attrs;
@@ -132,13 +131,11 @@ static PyObject *merge_rules(PyObject *self,PyObject *args) {
     result=unicode((Str){out,size});doc2struct_buffer_free(out);return result;
 }
 static int input(PyObject *o, Str *out, PyObject **owner) {
-    Py_ssize_t n;
-    const char *p;
     *owner = NULL;
     if (PyUnicode_Check(o)) {
-        p = PyUnicode_AsUTF8AndSize(o, &n);
-        if (!p)
-            return 0;
+        Py_ssize_t n;
+        const char *p = PyUnicode_AsUTF8AndSize(o, &n);
+        if (!p) return 0;
         *out = (Str){p, (size_t)n};
         return 1;
     }
@@ -150,6 +147,14 @@ static int input(PyObject *o, Str *out, PyObject **owner) {
     }
     if (!PyBytes_Check(o)) {
         PyErr_SetString(PyExc_TypeError, "input must be bytes, bytearray, or str");
+        return 0;
+    }
+    *out = (Str){PyBytes_AS_STRING(o), (size_t)PyBytes_GET_SIZE(o)};
+    return 1;
+}
+static int parse_input(PyObject *o, Str *out) {
+    if (!PyBytes_Check(o)) {
+        PyErr_SetString(PyExc_TypeError, "document input must be bytes");
         return 0;
     }
     *out = (Str){PyBytes_AS_STRING(o), (size_t)PyBytes_GET_SIZE(o)};
@@ -232,9 +237,9 @@ static PyObject *export_runs(Document *d) {
                      : Py_NewRef(Py_None)) ||
             !setstr(row, "text", r->text) ||
             !set(row, "flags", PyLong_FromUnsignedLong(r->flags)) ||
-            !set(row, "font_size", r->has_font ? (r->font_float ? PyFloat_FromDouble(r->font) : PyLong_FromDouble(r->font)) : Py_NewRef(Py_None)) ||
+            !set(row, "font_size", r->has_font ? PyFloat_FromDouble(r->font) : Py_NewRef(Py_None)) ||
             !set(row, "indent",
-                 r->has_indent ? (r->indent_float ? PyFloat_FromDouble(r->indent) : PyLong_FromDouble(r->indent)) : Py_NewRef(Py_None)) ||
+                 r->has_indent ? PyFloat_FromDouble(r->indent) : Py_NewRef(Py_None)) ||
             !setstr(row, "href", r->href) || !setstr(row, "tag", r->tag) ||
             !setstr(row, "src", r->src)) {
             Py_DECREF(row);
@@ -304,26 +309,43 @@ error:
     return 0;
 }
 static PyObject *normalize(PyObject *self, PyObject *args) {
-    PyObject *tokens, *result = NULL;
+    PyObject *tokens, *capsule, *result = NULL;
     Document *d = NULL;
-    Options options = {0, 0, 100};
-    Py_ssize_t cap = 100;
+    Rules *rules;
     int ok = 0;
-    if (!PyArg_ParseTuple(args, "O|ppn:normalize", &tokens, &options.hide_hidden_attr,
-                          &options.hide_visibility, &cap))
+    if (!PyArg_ParseTuple(args, "OO:normalize", &tokens, &capsule))
         return NULL;
-    if (cap < 1) {
-        PyErr_SetString(PyExc_ValueError, "max_span must be positive");
-        return NULL;
-    }
-    options.max_span = (size_t)cap;
+    rules = PyCapsule_GetPointer(capsule, "doc2struct.Rules");
+    if (!rules) return NULL;
     if (!(d=new_document()) || !import_tokens(d, tokens))
         goto done;
-    Py_BEGIN_ALLOW_THREADS ok = doc2struct_normalize(d, options);
+    Py_BEGIN_ALLOW_THREADS ok = doc2struct_normalize(d, rules);
     Py_END_ALLOW_THREADS if (ok) result = export_runs(d);
     else native_error(doc2struct_document_error(d));
 done:
     doc2struct_document_free(d);
+    return result;
+}
+static PyObject *html_instructions(PyObject *self, PyObject *args) {
+    PyObject *html, *capsule, *owner = NULL, *result = NULL;
+    Document *d = NULL;
+    Rules *rules;
+    Str text;
+    int ok;
+    if (!PyArg_ParseTuple(args, "OO:html_instructions", &html, &capsule))
+        return NULL;
+    rules = PyCapsule_GetPointer(capsule, "doc2struct.Rules");
+    if (!rules) return NULL;
+    if (!input(html, &text, &owner) || !(d = new_document()))
+        goto done;
+    Py_BEGIN_ALLOW_THREADS
+    ok = doc2struct_tokenize(d, text) && doc2struct_normalize(d, rules);
+    Py_END_ALLOW_THREADS
+    if (ok) result = export_runs(d);
+    else native_error(doc2struct_document_error(d));
+done:
+    doc2struct_document_free(d);
+    Py_XDECREF(owner);
     return result;
 }
 static int import_runs(Document *d, PyObject *instructions) {
@@ -371,7 +393,6 @@ static int import_runs(Document *d, PyObject *instructions) {
         if (v != Py_None) {
             r->has_font = 1;
             r->font = PyFloat_AsDouble(v);
-            r->font_float = PyFloat_Check(v);
         }
         v = get(o, "indent");
         if (!v)
@@ -379,7 +400,6 @@ static int import_runs(Document *d, PyObject *instructions) {
         if (v != Py_None) {
             r->has_indent = 1;
             r->indent = PyFloat_AsDouble(v);
-            r->indent_float = PyFloat_Check(v);
         }
         v = get(o, "span");
         if (!v)
@@ -489,13 +509,9 @@ static PyObject *source(const Run *r, Str name) {
     if (str_is(name, "src"))
         return unicode(r->src);
     if (str_is(name, "font_size"))
-        return r->has_font
-                   ? (r->font_float ? PyFloat_FromDouble(r->font) : PyLong_FromDouble(r->font))
-                   : Py_NewRef(Py_None);
+        return r->has_font ? PyFloat_FromDouble(r->font) : Py_NewRef(Py_None);
     if (str_is(name, "indent"))
-        return r->has_indent ? (r->indent_float ? PyFloat_FromDouble(r->indent)
-                                                : PyLong_FromDouble(r->indent))
-                             : Py_NewRef(Py_None);
+        return r->has_indent ? PyFloat_FromDouble(r->indent) : Py_NewRef(Py_None);
     if (str_is(name, "flags"))
         return PyLong_FromUnsignedLong(r->flags);
     return Py_NewRef(Py_None);
@@ -504,17 +520,10 @@ static PyObject *custom(Document *d, const Column *c, const Row *r) {
     size_t i, j;
     int all = str_is(c->which, "all") || str_is(c->dtype, "list");
     PyObject *values;
-    if (str_is(r->type, "table"))
+    if (!doc2struct_column_applies(c, r))
         return Py_NewRef(Py_None);
-    if (c->filter_types) {
-        for (i = 0; i < c->ntypes; i++)
-            if (str_eq(r->type, c->types[i]))
-                break;
-        if (i == c->ntypes)
-            return Py_NewRef(Py_None);
-    }
-    if (str_is(c->source, "text")) {
-        Str text = r->text;
+    if (str_is(c->source, "text") || str_is(c->source, "header_title")) {
+        Str text = str_is(c->source, "header_title") ? r->title : r->text;
         if (!doc2struct_column_text(d,c,text,&text)) {
             native_error(doc2struct_document_error(d));return NULL;
         }
@@ -593,15 +602,15 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
     const Row *rows=doc2struct_document_rows(d,&nrows);
     const Column *columns=doc2struct_rules_columns(r,&ncolumns);
     PyObject *list = PyList_New((Py_ssize_t)nrows);
-    static const char *names[] = {"id",       "level",  "type",    "class",    "standardized_title",
+    static const char *names[] = {"id",       "level",  "type",
                                   "text",     "matrix", "cleaned", "preamble", "footnotes",
                                   "postamble"};
     static const char *type_names[] = {"title", "text", "textsmall", "table", "image"};
-    PyObject *keys[11] = {0}, *types[5] = {0};
+    PyObject *keys[9] = {0}, *types[5] = {0};
     size_t i, j, k;
     if (!list)
         return NULL;
-    for (i = 0; i < 11; i++) {
+    for (i = 0; i < 9; i++) {
         keys[i] = PyUnicode_InternFromString(names[i]);
         if (!keys[i])
             goto error;
@@ -627,15 +636,11 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
         if (!set_key(out, keys[0], PyLong_FromSize_t(row->id)) ||
             !set_key(out, keys[1], PyLong_FromSize_t(row->level)) ||
             !set_key(out, keys[2], Py_NewRef(type)) ||
-            (with_rules &&
-             (!set_key(out, keys[3],
-                       str_eq(row->klass, row->type) ? Py_NewRef(type) : unicode(row->klass)) ||
-              !set_key(out, keys[4], unicode(row->title)))) ||
-            !set_key(out, keys[5], unicode(row->text)) ||
-            !set_key(out, keys[6], row->matrix.nr ? matrix(&row->matrix) : Py_NewRef(Py_None)) ||
-            !set_key(out, keys[7], cleanup_info(row)) ||
-            !set_key(out, keys[8], unicode(row->preamble)) || !set_key(out, keys[9], notes(row)) ||
-            !set_key(out, keys[10], unicode(row->postamble))) {
+            !set_key(out, keys[3], unicode(row->text)) ||
+            !set_key(out, keys[4], row->matrix.nr ? matrix(&row->matrix) : Py_NewRef(Py_None)) ||
+            !set_key(out, keys[5], cleanup_info(row)) ||
+            !set_key(out, keys[6], unicode(row->preamble)) || !set_key(out, keys[7], notes(row)) ||
+            !set_key(out, keys[8], unicode(row->postamble))) {
             Py_DECREF(type);
             Py_DECREF(out);
             goto error;
@@ -664,13 +669,13 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
         }
         PyList_SET_ITEM(list, (Py_ssize_t)i, out);
     }
-    for (i = 0; i < 11; i++)
+    for (i = 0; i < 9; i++)
         Py_DECREF(keys[i]);
     for (i = 0; i < 5; i++)
         Py_DECREF(types[i]);
     return list;
 error:
-    for (i = 0; i < 11; i++)
+    for (i = 0; i < 9; i++)
         Py_XDECREF(keys[i]);
     for (i = 0; i < 5; i++)
         Py_XDECREF(types[i]);
@@ -849,11 +854,11 @@ static PyObject *native_json(PyObject *self, PyObject *capsule) {
 }
 
 static PyObject *native_columns(PyObject *self, PyObject *capsule) {
-    static const char *names[] = {"id",       "level",  "type",    "class",    "standardized_title",
+    static const char *names[] = {"id",       "level",  "type",
                                   "text",     "matrix", "cleaned", "preamble", "footnotes",
                                   "postamble"};
     NativeDocument *native = PyCapsule_GetPointer(capsule, "doc2struct.NativeDocument");
-    PyObject *columns, *lists[11] = {0};
+    PyObject *columns, *lists[9] = {0};
     size_t i, j, nrows, ncolumns;
     const Row *rows;const Column *definitions;
     if (!native)
@@ -863,38 +868,34 @@ static PyObject *native_columns(PyObject *self, PyObject *capsule) {
     columns = PyDict_New();
     if (!columns)
         return NULL;
-    for (j = 0; j < 11; j++) {
-        if (!native->with_rules && (j == 3 || j == 4))
-            continue;
+    for (j = 0; j < 9; j++) {
         lists[j] = PyList_New((Py_ssize_t)nrows);
         if (!lists[j] || PyDict_SetItemString(columns, names[j], lists[j]) < 0)
             goto error;
     }
     for (i = 0; i < nrows; i++) {
         const Row *r = rows + i;
-        PyObject *values[11];
+        PyObject *values[9];
         values[0] = PyLong_FromSize_t(r->id);
         values[1] = PyLong_FromSize_t(r->level);
         values[2] = unicode(r->type);
-        values[3] = native->with_rules ? unicode(r->klass) : NULL;
-        values[4] = native->with_rules ? unicode(r->title) : NULL;
-        values[5] = unicode(r->text);
-        values[6] = r->matrix.nr ? matrix(&r->matrix) : Py_NewRef(Py_None);
-        values[7] = cleanup_info(r);
-        values[8] = unicode(r->preamble);
-        values[9] = notes(r);
-        values[10] = unicode(r->postamble);
-        for (j = 0; j < 11; j++) {
+        values[3] = unicode(r->text);
+        values[4] = r->matrix.nr ? matrix(&r->matrix) : Py_NewRef(Py_None);
+        values[5] = cleanup_info(r);
+        values[6] = unicode(r->preamble);
+        values[7] = notes(r);
+        values[8] = unicode(r->postamble);
+        for (j = 0; j < 9; j++) {
             if (!lists[j])
                 continue;
             if (!values[j]) {
                 size_t k;
-                for (k = 0; k < 11; k++)
+                for (k = 0; k < 9; k++)
                     Py_XDECREF(values[k]);
                 goto error;
             }
         }
-        for (j = 0; j < 11; j++)
+        for (j = 0; j < 9; j++)
             if (lists[j])
                 PyList_SET_ITEM(lists[j], (Py_ssize_t)i, values[j]);
     }
@@ -923,11 +924,11 @@ static PyObject *native_columns(PyObject *self, PyObject *capsule) {
         Py_DECREF(key);
         Py_DECREF(values);
     }
-    for (j = 0; j < 11; j++)
+    for (j = 0; j < 9; j++)
         Py_XDECREF(lists[j]);
     return columns;
 error:
-    for (j = 0; j < 11; j++)
+    for (j = 0; j < 9; j++)
         Py_XDECREF(lists[j]);
     Py_DECREF(columns);
     return NULL;
@@ -940,19 +941,10 @@ static PyObject *parse_html_impl(PyObject *self, PyObject *args, int keep_native
     doc2struct_error error;
     NativeDocument *native = NULL;
     NativeParser *parser = NULL;
-    Options options = {0, 0, 100};
-    Py_ssize_t cap = 100;
     Str text;
     int with_rules, ok = 0;
-    if (!PyArg_ParseTuple(args, "OOp|ppnO:parse_html", &html, &capsule, &with_rules,
-                          &options.hide_hidden_attr, &options.hide_visibility, &cap,
-                          &parser_capsule))
+    if (!PyArg_ParseTuple(args, "OOp|O:parse_html", &html, &capsule, &with_rules, &parser_capsule))
         return NULL;
-    if (cap < 1) {
-        PyErr_SetString(PyExc_ValueError, "max_span must be positive");
-        return NULL;
-    }
-    options.max_span = (size_t)cap;
     r = PyCapsule_GetPointer(capsule, "doc2struct.Rules");
     if (!r)
         return NULL;
@@ -981,12 +973,12 @@ static PyObject *parse_html_impl(PyObject *self, PyObject *args, int keep_native
         if (!native)
             return PyErr_NoMemory();
     }
-    if (!input(html, &text, &owner))
+    if (!parse_input(html, &text))
         goto done;
     if (parser)
         parser->busy = 1;
     Py_BEGIN_ALLOW_THREADS
-    document=doc2struct_parse(parser?parser->context:NULL,text,r,options,&error);
+    document=doc2struct_parse(parser?parser->context:NULL,text,r,&error);
     ok=document!=NULL;
     Py_END_ALLOW_THREADS if (ok && keep_native) {
         native->document=document;
@@ -1038,7 +1030,6 @@ static PyObject *pdfium_init(PyObject *self, PyObject *path) {
 
 static PyObject *pdf_impl(PyObject *self, PyObject *args, int instructions) {
     PyObject *pdf, *capsule = NULL, *parser_capsule = Py_None, *owner = NULL, *result = NULL;
-    const char *password = NULL;
     NativeParser *parser;
     Rules *rules = NULL;
     Document *document;
@@ -1046,17 +1037,12 @@ static PyObject *pdf_impl(PyObject *self, PyObject *args, int instructions) {
     Str bytes;
     int with_rules = 0;
     if (instructions) {
-        if (!PyArg_ParseTuple(args, "O|z:pdf_instructions", &pdf, &password)) return NULL;
+        if (!PyArg_ParseTuple(args, "OO:pdf_instructions", &pdf, &capsule)) return NULL;
     } else {
-        if (!PyArg_ParseTuple(args, "OOp|zO:parse_pdf", &pdf, &capsule, &with_rules,
-                              &password, &parser_capsule)) return NULL;
-        rules = PyCapsule_GetPointer(capsule, "doc2struct.Rules");
-        if (!rules) return NULL;
+        if (!PyArg_ParseTuple(args, "OOp|O:parse_pdf", &pdf, &capsule, &with_rules, &parser_capsule)) return NULL;
     }
-    if (!PyBytes_Check(pdf) && !PyByteArray_Check(pdf)) {
-        PyErr_SetString(PyExc_TypeError, "PDF input must be bytes or bytearray");
-        return NULL;
-    }
+    rules = PyCapsule_GetPointer(capsule, "doc2struct.Rules");
+    if (!rules) return NULL;
     if (parser_capsule == Py_None) {
         parser_capsule = default_parser(self);
         if (!parser_capsule) return NULL;
@@ -1068,12 +1054,18 @@ static PyObject *pdf_impl(PyObject *self, PyObject *args, int instructions) {
         if (!parser) return NULL;
         if (parser->closed) { PyErr_SetString(PyExc_ValueError, "Parser is closed"); return NULL; }
     }
-    if (!input(pdf, &bytes, &owner)) return NULL;
+    if (instructions) {
+        if (!PyBytes_Check(pdf) && !PyByteArray_Check(pdf)) {
+            PyErr_SetString(PyExc_TypeError, "PDF input must be bytes or bytearray");
+            return NULL;
+        }
+        if (!input(pdf, &bytes, &owner)) return NULL;
+    } else if (!parse_input(pdf, &bytes)) return NULL;
     if (parser) parser->busy = 1;
     Py_BEGIN_ALLOW_THREADS
     document = instructions
-        ? doc2struct_pdf_instructions(parser ? parser->context : NULL, bytes, password, &error)
-        : doc2struct_parse_pdf(parser ? parser->context : NULL, bytes, rules, password, &error);
+        ? doc2struct_pdf_instructions(parser ? parser->context : NULL, bytes, rules, &error)
+        : doc2struct_parse_pdf(parser ? parser->context : NULL, bytes, rules, &error);
     Py_END_ALLOW_THREADS
     if (document) result = instructions ? export_runs(document) : export_rows(document,rules,with_rules);
     else native_error(error.message);
@@ -1085,33 +1077,59 @@ static PyObject *pdf_impl(PyObject *self, PyObject *args, int instructions) {
 static PyObject *parse_pdf(PyObject *self, PyObject *args) { return pdf_impl(self,args,0); }
 static PyObject *pdf_instructions(PyObject *self, PyObject *args) { return pdf_impl(self,args,1); }
 
-static PyObject *text_instructions_impl(PyObject *args, int partial) {
-    PyObject *source, *owner = NULL, *result = NULL;
-    Py_ssize_t tab_size = 8;
+static PyObject *text_impl(PyObject *self, PyObject *args, int partial, int instructions) {
+    PyObject *source, *owner = NULL, *result = NULL, *capsule = NULL, *parser_capsule = Py_None;
+    NativeParser *parser;
+    Rules *rules = NULL;
+    int with_rules = 0;
     Str bytes;
     Document *document;
     doc2struct_error error;
-    if (!PyArg_ParseTuple(args, "O|n:text_instructions", &source, &tab_size)) return NULL;
-    if (tab_size < 1 || tab_size > 256) {
-        PyErr_SetString(PyExc_ValueError, "tab_size must be between 1 and 256");
-        return NULL;
+    if (instructions) {
+        if (!PyArg_ParseTuple(args, "OO:text_instructions", &source, &capsule)) return NULL;
+    } else {
+        if (!PyArg_ParseTuple(args, "OOp|O:parse_text", &source, &capsule, &with_rules, &parser_capsule)) return NULL;
     }
-    if (!input(source, &bytes, &owner)) return NULL;
+    rules = PyCapsule_GetPointer(capsule, "doc2struct.Rules");
+    if (!rules) return NULL;
+    if (parser_capsule == Py_None) {
+        parser_capsule = default_parser(self);
+        if (!parser_capsule) return NULL;
+        parser = PyCapsule_GetPointer(parser_capsule, "doc2struct.Parser");
+        if (!parser) return NULL;
+        if (parser->busy) parser = NULL;
+    } else {
+        parser = idle_parser(parser_capsule);
+        if (!parser) return NULL;
+        if (parser->closed) { PyErr_SetString(PyExc_ValueError, "Parser is closed"); return NULL; }
+    }
+    if (instructions) {
+        if (!input(source, &bytes, &owner)) return NULL;
+    } else if (!parse_input(source, &bytes)) return NULL;
+    if (parser) parser->busy = 1;
     Py_BEGIN_ALLOW_THREADS
-    document = partial
-        ? doc2struct_partialsgml_instructions(NULL, bytes, (size_t)tab_size, &error)
-        : doc2struct_text_instructions(NULL, bytes, (size_t)tab_size, &error);
+    if (instructions) document = partial
+        ? doc2struct_partialsgml_instructions(parser ? parser->context : NULL, bytes, rules, &error)
+        : doc2struct_text_instructions(parser ? parser->context : NULL, bytes, rules, &error);
+    else document = partial
+        ? doc2struct_parse_partialsgml(parser ? parser->context : NULL, bytes, rules, &error)
+        : doc2struct_parse_text(parser ? parser->context : NULL, bytes, rules, &error);
     Py_END_ALLOW_THREADS
-    if (document) result = export_runs(document);
+    if (document) result = instructions ? export_runs(document) : export_rows(document, rules, with_rules);
     else native_error(error.message);
     doc2struct_document_free(document);
+    if (parser) parser->busy = 0;
     Py_XDECREF(owner);
     return result;
 }
-static PyObject *text_instructions(PyObject *self, PyObject *args) { return text_instructions_impl(args, 0); }
-static PyObject *partialsgml_instructions(PyObject *self, PyObject *args) { return text_instructions_impl(args, 1); }
+static PyObject *text_instructions(PyObject *self, PyObject *args) { return text_impl(self, args, 0, 1); }
+static PyObject *partialsgml_instructions(PyObject *self, PyObject *args) { return text_impl(self, args, 1, 1); }
+static PyObject *parse_text(PyObject *self, PyObject *args) { return text_impl(self, args, 0, 0); }
+static PyObject *parse_partialsgml(PyObject *self, PyObject *args) { return text_impl(self, args, 1, 0); }
 
 static PyMethodDef methods[] = {
+    {"parse_text", parse_text, METH_VARARGS, "Parse plain text through native layout and standardization."},
+    {"parse_partialsgml", parse_partialsgml, METH_VARARGS, "Parse partial SGML through native layout and standardization."},
     {"text_instructions", text_instructions, METH_VARARGS, "Convert plain text to native instructions."},
     {"partialsgml_instructions", partialsgml_instructions, METH_VARARGS, "Convert text with partial SGML to native instructions."},
     {"pdfium_init", pdfium_init, METH_O, "Initialize the required private PDFium engine."},
@@ -1140,6 +1158,7 @@ static PyMethodDef methods[] = {
      "Experimental: serialize a native document to UTF-8 JSON."},
     {"tokenize", tokenize, METH_O, "Return tokens from the native scanner."},
     {"normalize", normalize, METH_VARARGS, "Normalize a Python token iterable."},
+    {"html_instructions", html_instructions, METH_VARARGS, "Convert HTML directly to instruction rows."},
     {"standardize", standardize, METH_VARARGS, "Standardize Python instruction rows."},
     {NULL, NULL, 0, NULL}};
 static int module_traverse(PyObject *module, visitproc visit, void *arg) {

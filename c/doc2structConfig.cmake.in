@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+if(NOT WIN32)
+    find_dependency(Threads)
+endif()
+include("${CMAKE_CURRENT_LIST_DIR}/doc2structTargets.cmake")
+set_and_check(doc2struct_PDFIUM_LIBRARY "@PACKAGE_CMAKE_INSTALL_BINDIR@/@PDFIUM_RUNTIME@")
+check_required_components(doc2struct)
