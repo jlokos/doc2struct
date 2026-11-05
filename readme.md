@@ -5,6 +5,7 @@ doc2struct is an algorithm that can parse documents fast on one thread. It has b
 ![Parsing a document](image.png)
 
 **installation**
+
 python 
 ```
 pip install doc2struct
@@ -20,6 +21,7 @@ cmake --install build --config Release --prefix ./install
 ```
 
 **quickstart**
+
 ```python
 from doc2struct import parse_html, visualize_standardized_text
 # e.g. https://www.sec.gov/Archives/edgar/data/1318605/000095017022000796/tsla-20211231.htm
@@ -447,7 +449,7 @@ It should be fairly easy to add new adapters for different modalities. OCR -> in
     - HTML parsing speed benchmarked at 500 MB/s 
     - PDF parsing speed benchmarked at 25 MB/s 
     - TXT at 60 MB/s
-    - Rulesets defined for [n][ of sec corpus]
+    - Rulesets defined for 900+ SEC document types.
 
 ## Process
 
