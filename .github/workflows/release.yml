@@ -166,6 +166,11 @@ jobs:
         run: python build_scripts/package_native.py --platform ${{ matrix.platform }}
         env:
           MACOSX_DEPLOYMENT_TARGET: "14.0"
+      - name: Check bounded native scans
+        run: |
+          cmake -S c/tests -B build/scan-tests -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/scan-tests --config Release
+          ctest --test-dir build/scan-tests -C Release --output-on-failure
       - uses: actions/upload-artifact@v4
         with:
           name: native-${{ matrix.platform }}
@@ -200,6 +205,7 @@ jobs:
           tar -xzf dist/doc2struct-*.tar.gz -C build/source-check --strip-components=1
           python -m pip install ./build/source-check
           python build_scripts/smoke_release.py --python
+          python -m unittest discover -s build/source-check/python/tests
       - uses: actions/upload-artifact@v4
         with:
           name: sdist

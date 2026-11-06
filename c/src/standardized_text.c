@@ -4,7 +4,6 @@
 #include <stdio.h>
 
 static int image(const Item *i) { return i->run.src.p != NULL; }
-static int empty(const Item *i) { return !image(i) && !ds_strip(i->run.text, 1).n; }
 static int same(const Item *a, const Item *b) {
     return a->run.flags == b->run.flags && a->run.has_font == b->run.has_font &&
            (!a->run.has_font || a->run.font == b->run.font);
@@ -291,10 +290,9 @@ large:
 }
 static int group(Document *d, Vec *lines) {
     Run *runs = d->runs.p;
-    size_t i, j, k;
+    size_t i, j;
     for (i = 0; i < d->runs.n; i = j) {
         Line line = {0};
-        Vec items = {0};
         for (j = i; j < d->runs.n && runs[j].block == runs[i].block; j++)
             ;
         if (runs[i].in_table) {
@@ -304,69 +302,10 @@ static int group(Document *d, Vec *lines) {
                 return 0;
             continue;
         }
-        for (k = i; k < j; k++) {
-            Item cur = {runs[k], 0};
-            Item *all = items.p;
-            size_t q;
-            if (!items.n && empty(&cur))
-                continue;
-            if (!ds_keep_href(d, &cur.hrefs, cur.run.href))
-                return 0;
-            if (!items.n) {
-                if (!append_item(d, &items, cur))
-                    return 0;
-                continue;
-            }
-            if (image(&cur) || image(all + items.n - 1)) {
-                if (!append_item(d, &items, cur))
-                    return 0;
-            } else if (empty(&cur) || same(&cur, all + items.n - 1)) {
-                if (!ds_append_hrefs(d, &all[items.n - 1].hrefs, cur.hrefs))
-                    return 0;
-                all[items.n - 1].run.text =
-                    ds_cat(&d->arena, all[items.n - 1].run.text, cur.run.text);
-            } else {
-                int merged = 0;
-                for (q = items.n; q; q--)
-                    if (!image(all + q - 1) && same(&cur, all + q - 1)) {
-                        Vec parts = {0};
-                        Str *p;
-                        size_t x;
-                        for (x = q - 1; x < items.n; x++)
-                            if (!image(all + x)) {
-                                p = ds_push(&d->arena, &parts, sizeof(Str));
-                                if (!p)
-                                    return 0;
-                                *p = all[x].run.text;
-                                if (x >= q && !ds_append_hrefs(d, &all[q - 1].hrefs, all[x].hrefs))
-                                    return 0;
-                            }
-                        p = ds_push(&d->arena, &parts, sizeof(Str));
-                        if (!p)
-                            return 0;
-                        *p = cur.run.text;
-                        if (!ds_append_hrefs(d, &all[q - 1].hrefs, cur.hrefs))
-                            return 0;
-                        all[q - 1].run.text = ds_join(&d->arena, parts.p, parts.n, ds_str(""));
-                        items.n = q;
-                        merged = 1;
-                        break;
-                    }
-                if (!merged && !append_item(d, &items, cur))
-                    return 0;
-            }
-        }
-        if (items.n == 1 && !image(items.p))
-            ((Item *)items.p)->run.text = ds_strip(((Item *)items.p)->run.text, 1);
-        for (k = 0; k < items.n; k++)
-            if (!empty((Item *)items.p + k))
-                break;
-        if (k < items.n) {
-            line.items = items.p;
-            line.nitems = items.n;
-            if (!append_line(d, lines, line))
-                return 0;
-        }
+        if (!ds_flow_plain_line(d, runs + i, j - i, &line))
+            return 0;
+        if (line.nitems && !append_line(d, lines, line))
+            return 0;
     }
     return !d->arena.error[0];
 }
@@ -394,8 +333,10 @@ static int clean(Document *d, const Rules *r, Vec *lines) {
     int dominant = 0;
     double common = r->page_label ? font_stats(d, lines, &dominant) : 0;
     /* Within cleanup the original item slices are immutable. Cache only this
-     * pass's lowercase views, without enlarging every persistent Item/Line. */
-    if (d->no_fonts && lines->n && (r->repeat_threshold || r->page_label)) {
+     * pass's lowercase views, without enlarging every persistent Item/Line.
+     * Short HTML blocks keep the direct path; text layout already uses this
+     * cache even for short documents. */
+    if ((d->no_fonts || lines->n >= 32) && lines->n && (r->repeat_threshold || r->page_label)) {
         size_t count = 0;
         offsets = ds_alloc_uninit(&d->arena, lines->n * sizeof(size_t));
         if (!offsets) return 0;
@@ -596,34 +537,77 @@ static int header_candidate(const Rules *r, Line *line) {
 }
 /* Rules see the complete logical line, with HTML whitespace normalized.
  * Display text retains its original whitespace and capitalization. */
-static Str rule_text(Document *d, Line *line) {
-    Str source = ds_lower(&d->arena, line_text(d, line->items, line->nitems));
-    char *buffer;
-    size_t i, k, used = 0;
-    int space = 0;
-    if (!source.p)
-        return source;
-    buffer = ds_alloc_uninit(&d->arena, source.n + 1);
-    if (!buffer)
-        return (Str){0};
-    for (i = 0; i < source.n; i += k) {
-        uint32_t c = ds_utf8(source.p + i, source.n - i, &k);
+static Str normalize_rule_text(Document *d, Str source, size_t i, size_t used, int space) {
+    char *buffer = ds_alloc_uninit(&d->arena, source.n + 1);
+    size_t k;
+    if (!buffer) return (Str){0};
+    if (used) memcpy(buffer, source.p, used);
+    for (; i < source.n;) {
+        unsigned char byte = (unsigned char)source.p[i];
+        uint32_t c;
+        if (byte == ' ') {
+            space = used != 0;
+            i++;
+            continue;
+        }
+        if (byte > 32 && byte < 128) {
+            size_t start = i++;
+            while (i < source.n && (unsigned char)source.p[i] > 32 &&
+                   (unsigned char)source.p[i] < 128)
+                i++;
+            if (space) buffer[used++] = ' ';
+            memcpy(buffer + used, source.p + start, i - start);
+            used += i - start;
+            space = 0;
+            continue;
+        }
+        c = ds_utf8(source.p + i, source.n - i, &k);
+        i += k;
         if (ds_space(c) || c == 0x200b) {
             space = used != 0;
             continue;
         }
         if (space)
             buffer[used++] = ' ';
-        memcpy(buffer + used, source.p + i, k);
+        memcpy(buffer + used, source.p + i - k, k);
         used += k;
         space = 0;
     }
     buffer[used] = 0;
     return (Str){buffer, used};
 }
-static int header_match(Document *d, const Rules *r, Line *line, Str text) {
+static Str rule_text(Document *d, Line *line) {
+    Str source = ds_lower(&d->arena, line_text(d, line->items, line->nitems));
+    size_t i = 0, k;
+    int space = 0;
+    if (!source.p) return source;
+    while (i < source.n) {
+        unsigned char byte = (unsigned char)source.p[i];
+        if (byte == ' ') {
+            if (!i || space) {
+                size_t used = i - (size_t)space;
+                return normalize_rule_text(d, source, i + 1, used, used != 0);
+            }
+            space = 1;
+            i++;
+        } else if (byte > 32 && byte < 128) {
+            do { i++; } while (i < source.n && (unsigned char)source.p[i] > 32 &&
+                              (unsigned char)source.p[i] < 128);
+            space = 0;
+        } else {
+            uint32_t c = ds_utf8(source.p + i, source.n - i, &k);
+            if (ds_space(c) || c == 0x200b) {
+                size_t used = i - (size_t)space;
+                return normalize_rule_text(d, source, i + k, used, used != 0);
+            }
+            i += k;
+            space = 0;
+        }
+    }
+    return space ? normalize_rule_text(d, source, i, i - 1, 1) : source;
+}
+static int header_match(Document *d, const Rules *r, unsigned flags, Str text) {
     size_t j;
-    unsigned flags = line->nitems ? attrs(line->items) : 0;
     for (j = 0; j < r->nheaders; j++) {
         Header *h = r->headers + j;
         /* Explicit requirements override the shared any-style policy; an
@@ -674,7 +658,7 @@ static int split(Document *d, const Rules *r, Vec *lines) {
             continue;
         }
         if (!line.layout_text && line.nitems && !image(line.items) && header_candidate(r, &line) &&
-            header_match(d, r, &line, rule_text(d, &line)) >= 0) {
+            header_match(d, r, line.nitems ? attrs(line.items) : 0, rule_text(d, &line)) >= 0) {
             /* Precise explicit section rules take precedence over inferred
              * enumeration. Lists still precede heuristic heading prediction. */
             line.listitem = 0;
@@ -762,7 +746,7 @@ static int classify(Document *d, const Rules *r, Vec *lines) {
             matched = -1;
             if (!ln->layout_text && header_candidate(r, ln)) {
                 text = rule_text(d, ln);
-                matched = header_match(d, r, ln, text);
+                matched = header_match(d, r, ln->attrs, text);
             }
             if (matched >= 0) {
                 Header *h = r->headers + matched;
@@ -976,7 +960,7 @@ static int layout_tables(Document *d, const Rules *r, Vec *lines) {
                     marker.nitems = 1;
                     marker_text = rule_text(d, &marker);
                     if (header_candidate(r, &marker) &&
-                        header_match(d, r, &marker, marker_text) >= 0) {
+                        header_match(d, r, marker.nitems ? attrs(marker.items) : 0, marker_text) >= 0) {
                         Str matched = ds_group(d, marker_text, 0);
                         suffix = ds_strip((Str){marker_text.p + matched.n,
                                                 marker_text.n - matched.n}, 0);
@@ -995,7 +979,7 @@ static int layout_tables(Document *d, const Rules *r, Vec *lines) {
                     }
                 }
                 if (!row_numbers && text.n <= 240 && header_candidate(r, &row) &&
-                    header_match(d, r, &row, text) >= 0) {
+                    header_match(d, r, row.nitems ? attrs(row.items) : 0, text) >= 0) {
                     headers++;
                     row.layout_text = 0;
                 } else if (text.n >= 200)

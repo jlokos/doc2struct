@@ -30,7 +30,7 @@ cmake.build-type = "Release"
 wheel.packages = ["python/src/doc2struct"]
 wheel.exclude = ["**/__pycache__/**"]
 install.components = ["python"]
-sdist.include = ["/CMakeLists.txt", "/LICENSE", "/c/**", "/presets/*.json", "/python/native/*.c", "/python/src/doc2struct/**/*.py", "/build_scripts/*.py"]
+sdist.include = ["/CMakeLists.txt", "/LICENSE", "/c/**", "/presets/*.json", "/python/native/*.c", "/python/src/doc2struct/**/*.py", "/python/tests/*.py", "/build_scripts/*.py"]
 sdist.exclude = ["build/**", "dist/**", "python/_native_source/**", "python/build/**", "python/src/doc2struct/_pdfium/**", "**/__pycache__/**", "*.egg-info/**", "testing/**", "data/**", "image.png"]
 
 [tool.scikit-build.cmake.define]
@@ -46,7 +46,7 @@ regex = '#define DOC2STRUCT_VERSION "(?P<value>[^\"]+)"'
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-* cp314-* cp315-*"
 skip = "*-musllinux_* *-win32 *-manylinux_i686"
-test-command = "python {project}/build_scripts/smoke_release.py --python"
+test-command = "python {project}/build_scripts/smoke_release.py --python && python -m unittest discover -s {project}/python/tests"
 repair-wheel-command = "python {project}/build_scripts/repair_wheel.py {wheel} {dest_dir}"
 
 [tool.cibuildwheel.linux]

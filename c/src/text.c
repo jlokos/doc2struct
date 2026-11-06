@@ -192,7 +192,9 @@ Str ds_input(Arena *a, Str s) {
     p = ds_alloc_uninit(a, s.n * 3 + 1);
     if (!p)
         return (Str){0};
-    for (i = 0, j = 0; i < s.n; i++) {
+    size_t prefix = ds_nonascii(s.p, s.n);
+    if (prefix) memcpy(p, s.p, prefix);
+    for (i = prefix, j = prefix; i < s.n; i++) {
         cp = (unsigned char)s.p[i];
         if (cp >= 128 && cp < 160)
             cp = cp1252[cp - 128];

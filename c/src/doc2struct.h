@@ -3,6 +3,7 @@
 #include <doc2struct/doc2struct.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include "pcre2.h"
 
@@ -170,9 +171,19 @@ typedef struct doc2struct_document {
 } Document;
 typedef int (*TokenSink)(void *, int, Str, const Attrs *);
 
+/* Let callers fold literal lengths and short comparisons. memory.c retains
+ * the external definitions as well as these internal fast paths. */
+#ifdef DS_STRING_IMPLEMENTATION
 Str ds_str(const char *s);
 int ds_eq(Str a, Str b);
 int ds_is(Str a, const char *s);
+#else
+static inline Str ds_str(const char *s) { return (Str){s, strlen(s)}; }
+static inline int ds_eq(Str a, Str b) {
+    return a.n == b.n && (!a.n || !memcmp(a.p, b.p, a.n));
+}
+static inline int ds_is(Str a, const char *s) { return a.p && ds_eq(a, ds_str(s)); }
+#endif
 void *ds_alloc(Arena *, size_t);
 void *ds_alloc_uninit(Arena *, size_t);
 void ds_arena_free(Arena *);
@@ -218,6 +229,7 @@ void ds_parser_clear(ParserContext *);
 int ds_flow_begin(Document *);
 int ds_flow_run(Document *, const Run *);
 int ds_flow_finish(Document *);
+int ds_flow_plain_line(Document *, const Run *, size_t, Line *);
 Str ds_json(Document *, const Rules *, int, Arena *);
 int ds_tables(Document *, const Rules *);
 Regex *ds_regex(Rules *, Str, int);

@@ -14,15 +14,20 @@ typedef struct {
     size_t list_depth;
     int list_item;
     int has_font, has_indent, suppressed, hides, act, root;
+    unsigned open_props;
 } Frame;
 typedef struct {
     Document *d;
     Options options;
     Vec stack;
-    int in_body, hidden, line_open, table, cell, emitted;
+    unsigned in_body : 1, missing_count : 5;
+    int hidden, line_open, table, cell, emitted;
     size_t table_depth, next_block, cur_block, line, table_block, row, col, cell_row, cell_col, rs,
         cs;
-    size_t *occupied, occupied_cap;
+    size_t *occupied, occupied_cap, occupied_used;
+    /* Full-stack misses stay absent until a new frame is pushed. Stop caching
+     * on overflow so diverse unmatched tags keep the original linear search. */
+    Str missing_ends[16];
 } Normalizer;
 static double rounded(double);
 static int member(Str t, const char *names) {
@@ -261,6 +266,8 @@ static int pop(Normalizer *n) {
         }
     } else if (f->props & T_TR) {
         if (f->act && n->table) {
+            if (n->col > n->occupied_used)
+                n->occupied_used = n->col;
             n->row++;
             n->col = 0;
         }
@@ -277,6 +284,11 @@ static int pop(Normalizer *n) {
 static int pop_open(Normalizer *n, unsigned names, unsigned stop) {
     Frame *frames = n->stack.p;
     size_t i;
+    /* Most block starts have no matching optional end tag. Each frame keeps
+     * its ancestors' properties so rejecting those starts is constant time,
+     * even in deeply nested markup. Popping restores the previous summary. */
+    if (!n->stack.n || !(frames[n->stack.n - 1].open_props & names))
+        return 1;
     for (i = n->stack.n; i; i--) {
         unsigned props = frames[i - 1].props;
         if (props & names) {
@@ -311,6 +323,10 @@ static size_t span(Str s, size_t cap) {
     long long v;
     if (!s.p || !s.n)
         return 1;
+    if (s.n == 1 && s.p[0] >= '1' && s.p[0] <= '9') {
+        size_t value = (size_t)(s.p[0] - '0');
+        return value > cap ? cap : value;
+    }
     s = ds_strip(s, 0);
     if (s.n >= sizeof(buf))
         return s.p[0] == '-' ? 1 : cap;
@@ -350,7 +366,7 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
     }
     if (kind == END && n->stack.n) {
         Frame *top = (Frame *)n->stack.p + n->stack.n - 1;
-        if (ds_eq(top->tag, tag)) {
+        if (top->tag.n == tag.n && ds_bytes_equal(top->tag.p, tag.p, tag.n)) {
             if (top->props & T_BODY_HTML)
                 return 1;
             return pop(n);
@@ -365,7 +381,13 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
                : (props & (T_TR | T_SECTION)) ? T_TABLE
                : (props & T_TABLE)            ? 0
                                               : T_TABLE | T_CELL;
-        for (i = n->stack.n; i; i--) {
+        if (n->stack.n && (((Frame *)n->stack.p)[n->stack.n - 1].props & stop))
+            return 1;
+        if (n->missing_count && n->missing_count <= 16)
+            for (i = 0; i < n->missing_count; i++)
+                if (ds_eq(n->missing_ends[i], tag))
+                    return 1;
+        for (i = n->stack.n ? n->stack.n - 1 : 0; i; i--) {
             Str t = ((Frame *)n->stack.p)[i - 1].tag;
             if (ds_eq(t, tag)) {
                 while (n->stack.n >= i)
@@ -375,6 +397,11 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
             }
             if (((Frame *)n->stack.p)[i - 1].props & stop)
                 return 1;
+        }
+        if (n->stack.n >= 128 && n->missing_count <= 16) {
+            if (n->missing_count < 16)
+                n->missing_ends[n->missing_count] = tag;
+            n->missing_count++;
         }
         return 1;
     }
@@ -414,7 +441,9 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
             *f = (Frame){0};
         f->suppressed = f->hides = f->act = f->root = 0;
         f->tag = tag;
+        n->missing_count = 0;
         f->props = props;
+        f->open_props |= props;
         if (props & T_BLOCK)
             f->block_tag = tag;
     }
@@ -463,10 +492,13 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
             f->root = 1;
             n->table = 1;
             n->table_block = n->next_block++;
+            if (n->col > n->occupied_used)
+                n->occupied_used = n->col;
+            if (n->occupied_used)
+                memset(n->occupied, 0, n->occupied_used * sizeof(size_t));
+            n->occupied_used = 0;
             n->row = n->col = 0;
             n->cell = 0;
-            if (n->occupied)
-                memset(n->occupied, 0, n->occupied_cap * sizeof(size_t));
         }
     } else if (props & (T_TR | T_CELL)) {
         f->act = n->table && n->table_depth == 1;
@@ -485,6 +517,8 @@ int ds_normalize_token(void *ctx, int kind, Str tag, const Attrs *a) {
             if (needed > n->occupied_cap) {
                 size_t cap = needed < 32 ? 32 : needed;
                 size_t *p;
+                if (n->occupied_cap <= SIZE_MAX / sizeof(size_t) / 2 && n->occupied_cap * 2 > cap)
+                    cap = n->occupied_cap * 2;
                 if (cap > SIZE_MAX / sizeof(size_t)) {
                     snprintf(d->arena.error, sizeof(d->arena.error), "table too large");
                     return 0;

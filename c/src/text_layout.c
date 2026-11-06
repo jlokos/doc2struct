@@ -530,8 +530,18 @@ static int marker_grid(TextLayout *layout, size_t start, size_t end, size_t widt
     TextGrid grid = {layout, {0}, width};
     GridLine *rows;
     size_t i, j, pass;
+    if (width > 4096) return 1;
+    /* Prove ineligibility from a bounded prefix before allocating word data. */
+    if (end - start > 512) {
+        TextLine *lines = layout->lines.p;
+        size_t limit = start + 513;
+        for (i = start; i < limit; i++)
+            if (lines[i].kind != TL_TEXT || lines[i].rule || !ds_strip(lines[i].text, 1).n)
+                break;
+        if (i == limit) return 1;
+    }
     if (!grid_words(&grid, start, end)) return 0;
-    if (!grid.rows.n || grid.rows.n > 512 || width > 4096) return 1;
+    if (!grid.rows.n || grid.rows.n > 512) return 1;
     /* Zero data cost at the exact markers is a proven minimum of the same
      * nonnegative objective used below, including its distance-to-marker term.
      * Removal/insertion cannot improve it either. Keep all ambiguous cases on

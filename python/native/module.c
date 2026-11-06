@@ -50,15 +50,15 @@ static PyObject *unicode(Str s) {
     }
     return PyUnicode_DecodeUTF8(s.p, (Py_ssize_t)s.n, "strict");
 }
-static PyObject *get(PyObject *d, const char *key) {
+static PyObject *get(PyObject *d, PyObject *key) {
     PyObject *o;
     if (!PyDict_Check(d)) {
         PyErr_SetString(PyExc_TypeError, "expected a dictionary");
         return NULL;
     }
-    o = PyDict_GetItemString(d, key);
+    o = PyDict_GetItem(d, key);
     if (!o)
-        PyErr_Format(PyExc_KeyError, "missing field: %s", key);
+        PyErr_Format(PyExc_KeyError, "missing field: %U", key);
     return o;
 }
 static int set(PyObject *d, const char *key, PyObject *value) {
@@ -70,6 +70,43 @@ static int set(PyObject *d, const char *key, PyObject *value) {
     return rc == 0;
 }
 static int setstr(PyObject *d, const char *key, Str s) { return set(d, key, unicode(s)); }
+static int set_key(PyObject *dict, PyObject *key, PyObject *value) {
+    int result;
+    if (!value)
+        return 0;
+    result = PyDict_SetItem(dict, key, value);
+    Py_DECREF(value);
+    return result == 0;
+}
+static int set_field(PyObject *dict, PyObject *key, PyObject *value, PyObject *prototype) {
+    /* Bulk shapes contain only immutable None. Every output mapping and each
+     * mutable payload remain independently owned. */
+    if (prototype && value == Py_None) {
+        Py_DECREF(value);
+        return 1;
+    }
+    return set_key(dict, key, value);
+}
+enum {
+    RK_BLOCK, RK_LINE, RK_ROW, RK_COL, RK_SPAN, RK_TEXT, RK_FLAGS,
+    RK_FONT, RK_INDENT, RK_HREF, RK_TAG, RK_SRC, RK_COUNT
+};
+/* Intern once per conversion, rather than decoding/hashing a temporary key for
+ * every field of every run. Keep references local for interpreter isolation. */
+static int run_keys(PyObject **keys) {
+    static const char *names[RK_COUNT] = {"block", "line", "row", "col", "span", "text",
+        "flags", "font_size", "indent", "href", "tag", "src"};
+    size_t i;
+    for (i = 0; i < RK_COUNT; i++)
+        if (!(keys[i] = PyUnicode_InternFromString(names[i])))
+            return 0;
+    return 1;
+}
+static void free_run_keys(PyObject **keys) {
+    size_t i;
+    for (i = 0; i < RK_COUNT; i++)
+        Py_XDECREF(keys[i]);
+}
 static void capsule_free(PyObject *c) {
     Rules *r=PyCapsule_GetPointer(c,"doc2struct.Rules");
     if(r)doc2struct_rules_free(r);else PyErr_Clear();
@@ -160,9 +197,18 @@ static int parse_input(PyObject *o, Str *out) {
     *out = (Str){PyBytes_AS_STRING(o), (size_t)PyBytes_GET_SIZE(o)};
     return 1;
 }
+static int set_token_attr(PyObject *dict, const char *name, Str value, PyObject **key) {
+    if (!key)
+        return setstr(dict, name, value);
+    if (!*key)
+        *key = PyUnicode_InternFromString(name);
+    return *key && set_key(dict, *key, unicode(value));
+}
 static PyObject *export_tokens(Document *d) {
     static const char *names[] = {"style", "colspan", "rowspan", "href", "src", "alt", "hidden"};
-    PyObject *list = PyList_New((Py_ssize_t)doc2struct_token_count(d));
+    size_t ntokens = doc2struct_token_count(d);
+    PyObject *list = PyList_New((Py_ssize_t)ntokens);
+    PyObject *keys[A_COUNT] = {0};
     size_t i = 0, j;
     doc2struct_token_iterator iterator={0};
     const Token *t;
@@ -180,19 +226,37 @@ static PyObject *export_tokens(Document *d) {
                 }
                 for (j = 0; j < A_COUNT; j++)
                     if (t->attrs && t->attrs->value[j].p &&
-                        !setstr(attrs, names[j], t->attrs->value[j])) {
+                        !set_token_attr(attrs, names[j], t->attrs->value[j],
+                                        ntokens >= 32 ? keys + j : NULL)) {
                         Py_DECREF(text);
                         Py_DECREF(attrs);
                         goto error;
                     }
             }
-            tuple = Py_BuildValue("iNN", t->kind, text, attrs);
-            if (!tuple)
+            tuple = PyTuple_New(3);
+            if (!tuple) {
+                Py_DECREF(text);
+                Py_DECREF(attrs);
                 goto error;
+            }
+            {
+                PyObject *kind = PyLong_FromLong(t->kind);
+                if (!kind) {
+                    Py_DECREF(tuple);
+                    Py_DECREF(text);
+                    Py_DECREF(attrs);
+                    goto error;
+                }
+                PyTuple_SET_ITEM(tuple, 0, kind);
+            }
+            PyTuple_SET_ITEM(tuple, 1, text);
+            PyTuple_SET_ITEM(tuple, 2, attrs);
             PyList_SET_ITEM(list, (Py_ssize_t)i++, tuple);
     }
+    for (j = 0; j < A_COUNT; j++) Py_XDECREF(keys[j]);
     return list;
 error:
+    for (j = 0; j < A_COUNT; j++) Py_XDECREF(keys[j]);
     Py_DECREF(list);
     return NULL;
 }
@@ -219,41 +283,58 @@ static PyObject *export_runs(Document *d) {
     size_t nruns;
     const Run *runs=doc2struct_document_runs(d,&nruns);
     PyObject *list = PyList_New((Py_ssize_t)nruns);
+    PyObject *keys[RK_COUNT] = {0};
+    PyObject *prototype = NULL;
     size_t i;
     if (!list)
         return NULL;
+    if (!run_keys(keys))
+        goto error;
+    if (nruns >= 32) {
+        prototype = PyDict_New();
+        if (!prototype) goto error;
+        for (i = 0; i < RK_COUNT; i++)
+            if (PyDict_SetItem(prototype, keys[i], Py_None) < 0) goto error;
+    }
     for (i = 0; i < nruns; i++) {
         const Run *r = runs + i;
-        PyObject *row = PyDict_New();
+        PyObject *row = prototype ? PyDict_Copy(prototype) : PyDict_New();
         if (!row)
             goto error;
-        if (!set(row, "block", PyLong_FromSize_t(r->block)) ||
-            !set(row, "line", PyLong_FromSize_t(r->line)) ||
-            !set(row, "row", r->in_table ? PyLong_FromSize_t(r->row) : Py_NewRef(Py_None)) ||
-            !set(row, "col", r->in_table ? PyLong_FromSize_t(r->col) : Py_NewRef(Py_None)) ||
-            !set(row, "span",
+        if (!set_field(row, keys[RK_BLOCK], PyLong_FromSize_t(r->block), prototype) ||
+            !set_field(row, keys[RK_LINE], PyLong_FromSize_t(r->line), prototype) ||
+            !set_field(row, keys[RK_ROW], r->in_table ? PyLong_FromSize_t(r->row) : Py_NewRef(Py_None), prototype) ||
+            !set_field(row, keys[RK_COL], r->in_table ? PyLong_FromSize_t(r->col) : Py_NewRef(Py_None), prototype) ||
+            !set_field(row, keys[RK_SPAN],
                  r->rowspan > 1 || r->colspan > 1
                      ? PyUnicode_FromFormat("%zux%zu", r->rowspan, r->colspan)
-                     : Py_NewRef(Py_None)) ||
-            !setstr(row, "text", r->text) ||
-            !set(row, "flags", PyLong_FromUnsignedLong(r->flags)) ||
-            !set(row, "font_size", r->has_font ? PyFloat_FromDouble(r->font) : Py_NewRef(Py_None)) ||
-            !set(row, "indent",
-                 r->has_indent ? PyFloat_FromDouble(r->indent) : Py_NewRef(Py_None)) ||
-            !setstr(row, "href", r->href) || !setstr(row, "tag", r->tag) ||
-            !setstr(row, "src", r->src)) {
+                     : Py_NewRef(Py_None), prototype) ||
+            !set_field(row, keys[RK_TEXT], unicode(r->text), prototype) ||
+            !set_field(row, keys[RK_FLAGS], PyLong_FromUnsignedLong(r->flags), prototype) ||
+            !set_field(row, keys[RK_FONT], r->has_font ? PyFloat_FromDouble(r->font) : Py_NewRef(Py_None), prototype) ||
+            !set_field(row, keys[RK_INDENT],
+                 r->has_indent ? PyFloat_FromDouble(r->indent) : Py_NewRef(Py_None), prototype) ||
+            !set_field(row, keys[RK_HREF], unicode(r->href), prototype) ||
+            !set_field(row, keys[RK_TAG], unicode(r->tag), prototype) ||
+            !set_field(row, keys[RK_SRC], unicode(r->src), prototype)) {
             Py_DECREF(row);
             goto error;
         }
         PyList_SET_ITEM(list, (Py_ssize_t)i, row);
     }
+    Py_XDECREF(prototype);
+    free_run_keys(keys);
     return list;
 error:
+    Py_XDECREF(prototype);
+    free_run_keys(keys);
     Py_DECREF(list);
     return NULL;
 }
 static int import_tokens(Document *d, PyObject *tokens) {
     PyObject *it = PyObject_GetIter(tokens), *o;
+    PyObject *keys[A_COUNT] = {0};
+    size_t starts = 0, k;
     if (!it)
         return 0;
     while ((o = PyIter_Next(it))) {
@@ -292,8 +373,17 @@ static int import_tokens(Document *d, PyObject *tokens) {
                 native_error(doc2struct_document_error(d));
                 goto error;
             }
+            /* Amortize key preparation on long streams while preserving the
+             * existing direct lookup path for small conversions. */
+            if (++starts == 32)
+                for (j = 0; j < A_COUNT; j++)
+                    if (!(keys[j] = PyUnicode_InternFromString(names[j]))) {
+                        Py_DECREF(t);
+                        goto error;
+                    }
             for (j = 0; j < A_COUNT; j++) {
-                PyObject *v = PyDict_GetItemString(attrs, names[j]);
+                PyObject *v = keys[j] ? PyDict_GetItem(attrs, keys[j]) :
+                                       PyDict_GetItemString(attrs, names[j]);
                 if (v)
                     dst->attrs->value[j] = string(d, v);
             }
@@ -303,9 +393,11 @@ static int import_tokens(Document *d, PyObject *tokens) {
             goto error;
     }
     Py_DECREF(it);
+    for (k = 0; k < A_COUNT; k++) Py_XDECREF(keys[k]);
     return !PyErr_Occurred() && !native_error(doc2struct_document_error(d));
 error:
     Py_DECREF(it);
+    for (k = 0; k < A_COUNT; k++) Py_XDECREF(keys[k]);
     return 0;
 }
 static PyObject *normalize(PyObject *self, PyObject *args) {
@@ -350,58 +442,61 @@ done:
 }
 static int import_runs(Document *d, PyObject *instructions) {
     PyObject *seq = PySequence_Fast(instructions, "instructions must be a sequence");
+    PyObject *keys[RK_COUNT] = {0};
     Py_ssize_t i;
     if (!seq)
         return 0;
+    if (!run_keys(keys))
+        goto error;
     for (i = 0; i < PySequence_Fast_GET_SIZE(seq); i++) {
         PyObject *o = PySequence_Fast_GET_ITEM(seq, i), *v;
         Run *r = doc2struct_add_run(d);
         if (!r)
             goto error;
         r->rowspan = r->colspan = 1;
-#define SIZE_FIELD(name)                                                                           \
-    v = get(o, #name);                                                                             \
+#define SIZE_FIELD(name, key)                                                                      \
+    v = get(o, keys[key]);                                                                         \
     if (!v)                                                                                        \
         goto error;                                                                                \
     r->name = PyLong_AsSize_t(v)
-        SIZE_FIELD(block);
-        SIZE_FIELD(line);
-        v = get(o, "row");
+        SIZE_FIELD(block, RK_BLOCK);
+        SIZE_FIELD(line, RK_LINE);
+        v = get(o, keys[RK_ROW]);
         if (!v)
             goto error;
         if (v != Py_None) {
             r->in_table = 1;
             r->row = PyLong_AsSize_t(v);
-            SIZE_FIELD(col);
+            SIZE_FIELD(col, RK_COL);
         }
 #undef SIZE_FIELD
-        r->text = string(d, get(o, "text"));
+        r->text = string(d, get(o, keys[RK_TEXT]));
         if (!r->text.p && !PyErr_Occurred())
             r->text = str_view("");
-        r->href = string(d, get(o, "href"));
-        r->src = string(d, get(o, "src"));
-        v = PyDict_GetItemString(o, "tag");
+        r->href = string(d, get(o, keys[RK_HREF]));
+        r->src = string(d, get(o, keys[RK_SRC]));
+        v = PyDict_GetItem(o, keys[RK_TAG]);
         if (v)
             r->tag = string(d, v);
-        v = get(o, "flags");
+        v = get(o, keys[RK_FLAGS]);
         if (!v)
             goto error;
         r->flags = v == Py_None ? 0 : (unsigned)PyLong_AsUnsignedLong(v);
-        v = get(o, "font_size");
+        v = get(o, keys[RK_FONT]);
         if (!v)
             goto error;
         if (v != Py_None) {
             r->has_font = 1;
             r->font = PyFloat_AsDouble(v);
         }
-        v = get(o, "indent");
+        v = get(o, keys[RK_INDENT]);
         if (!v)
             goto error;
         if (v != Py_None) {
             r->has_indent = 1;
             r->indent = PyFloat_AsDouble(v);
         }
-        v = get(o, "span");
+        v = get(o, keys[RK_SPAN]);
         if (!v)
             goto error;
         if (v != Py_None && PyObject_IsTrue(v)) {
@@ -424,9 +519,11 @@ static int import_runs(Document *d, PyObject *instructions) {
             goto error;
     }
     Py_DECREF(seq);
+    free_run_keys(keys);
     return !native_error(doc2struct_document_error(d));
 error:
     Py_DECREF(seq);
+    free_run_keys(keys);
     if (!PyErr_Occurred())
         native_error(doc2struct_document_error(d));
     return 0;
@@ -569,14 +666,6 @@ error:
     Py_DECREF(values);
     return NULL;
 }
-static int set_key(PyObject *dict, PyObject *key, PyObject *value) {
-    int result;
-    if (!value)
-        return 0;
-    result = PyDict_SetItem(dict, key, value);
-    Py_DECREF(value);
-    return result == 0;
-}
 static PyObject *cleanup_info(const Row *row) {
     PyObject *list;
     size_t i;
@@ -607,6 +696,7 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
                                   "postamble"};
     static const char *type_names[] = {"title", "text", "textsmall", "table", "image"};
     PyObject *keys[9] = {0}, *types[5] = {0};
+    PyObject *prototype = NULL, *column_keys = NULL;
     size_t i, j, k;
     if (!list)
         return NULL;
@@ -620,9 +710,28 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
         if (!types[i])
             goto error;
     }
+    if (ncolumns && nrows) {
+        if (ncolumns > PY_SSIZE_T_MAX) { PyErr_NoMemory(); goto error; }
+        column_keys = PyTuple_New((Py_ssize_t)ncolumns);
+        if (!column_keys) goto error;
+        for (i = 0; i < ncolumns; i++) {
+            PyObject *key = unicode(columns[i].name);
+            if (!key) goto error;
+            PyTuple_SET_ITEM(column_keys, (Py_ssize_t)i, key);
+        }
+    }
+    if (nrows >= 32) {
+        prototype = PyDict_New();
+        if (!prototype) goto error;
+        for (i = 0; i < 9; i++)
+            if (PyDict_SetItem(prototype, keys[i], Py_None) < 0) goto error;
+        for (i = 0; i < ncolumns; i++)
+            if (PyDict_SetItem(prototype, PyTuple_GET_ITEM(column_keys, (Py_ssize_t)i), Py_None) < 0)
+                goto error;
+    }
     for (i = 0; i < nrows; i++) {
         const Row *row = rows + i;
-        PyObject *out = PyDict_New(), *type = NULL;
+        PyObject *out = prototype ? PyDict_Copy(prototype) : PyDict_New(), *type = NULL;
         if (!out)
             goto error;
         for (k = 0; k < 5; k++)
@@ -633,39 +742,26 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
             Py_DECREF(out);
             goto error;
         }
-        if (!set_key(out, keys[0], PyLong_FromSize_t(row->id)) ||
-            !set_key(out, keys[1], PyLong_FromSize_t(row->level)) ||
-            !set_key(out, keys[2], Py_NewRef(type)) ||
-            !set_key(out, keys[3], unicode(row->text)) ||
-            !set_key(out, keys[4], row->matrix.nr ? matrix(&row->matrix) : Py_NewRef(Py_None)) ||
-            !set_key(out, keys[5], cleanup_info(row)) ||
-            !set_key(out, keys[6], unicode(row->preamble)) || !set_key(out, keys[7], notes(row)) ||
-            !set_key(out, keys[8], unicode(row->postamble))) {
+        if (!set_field(out, keys[0], PyLong_FromSize_t(row->id), prototype) ||
+            !set_field(out, keys[1], PyLong_FromSize_t(row->level), prototype) ||
+            !set_field(out, keys[2], Py_NewRef(type), prototype) ||
+            !set_field(out, keys[3], unicode(row->text), prototype) ||
+            !set_field(out, keys[4], row->matrix.nr ? matrix(&row->matrix) : Py_NewRef(Py_None), prototype) ||
+            !set_field(out, keys[5], cleanup_info(row), prototype) ||
+            !set_field(out, keys[6], unicode(row->preamble), prototype) ||
+            !set_field(out, keys[7], notes(row), prototype) ||
+            !set_field(out, keys[8], unicode(row->postamble), prototype)) {
             Py_DECREF(type);
             Py_DECREF(out);
             goto error;
         }
         Py_DECREF(type);
         for (j = 0; j < ncolumns; j++) {
-            PyObject *key = unicode(columns[j].name), *value;
-            if (!key) {
+            PyObject *key = PyTuple_GET_ITEM(column_keys, (Py_ssize_t)j);
+            if (!set_field(out, key, custom(d, columns + j, row), prototype)) {
                 Py_DECREF(out);
                 goto error;
             }
-            value = custom(d, columns + j, row);
-            if (!value) {
-                Py_DECREF(key);
-                Py_DECREF(out);
-                goto error;
-            }
-            if (PyDict_SetItem(out, key, value) < 0) {
-                Py_DECREF(key);
-                Py_DECREF(value);
-                Py_DECREF(out);
-                goto error;
-            }
-            Py_DECREF(key);
-            Py_DECREF(value);
         }
         PyList_SET_ITEM(list, (Py_ssize_t)i, out);
     }
@@ -673,12 +769,16 @@ static PyObject *export_rows(Document *d, Rules *r, int with_rules) {
         Py_DECREF(keys[i]);
     for (i = 0; i < 5; i++)
         Py_DECREF(types[i]);
+    Py_XDECREF(prototype);
+    Py_XDECREF(column_keys);
     return list;
 error:
     for (i = 0; i < 9; i++)
         Py_XDECREF(keys[i]);
     for (i = 0; i < 5; i++)
         Py_XDECREF(types[i]);
+    Py_XDECREF(prototype);
+    Py_XDECREF(column_keys);
     Py_DECREF(list);
     return NULL;
 }

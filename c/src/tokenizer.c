@@ -1,4 +1,5 @@
 #include "doc2struct.h"
+#include "tags.h"
 #include <string.h>
 #include <ctype.h>
 #include "scan.h"
@@ -15,6 +16,19 @@ static size_t text_end(const char *p, size_t n, int *entity) {
         if (ends) {
             unsigned bit = ds_first_bit(ends);
             *entity |= (amps & ((1u << bit) - 1)) != 0;
+            return i + bit;
+        }
+        *entity |= amps != 0;
+    }
+#endif
+#ifdef DS_NEON
+    for (; n - i >= 16; i += 16) {
+        uint8x16_t data = vld1q_u8((const uint8_t *)p + i);
+        uint64_t ends = ds_neon_mask(vceqq_u8(data, vdupq_n_u8('<')));
+        uint64_t amps = ds_neon_mask(vceqq_u8(data, vdupq_n_u8('&')));
+        if (ends) {
+            unsigned bit = ds_neon_first(ends);
+            *entity |= (amps & ((UINT64_C(1) << (4 * bit)) - 1)) != 0;
             return i + bit;
         }
         *entity |= amps != 0;
@@ -86,15 +100,7 @@ static Str intern_tag(Document *d, Str tag) {
         return (Str){0};
     return lower;
 }
-int ds_void(Str t) {
-    static const char *names[] = {"area", "base", "br",    "col",    "embed", "hr",  "img", "input",
-                                  "link", "meta", "param", "source", "track", "wbr", NULL};
-    size_t i;
-    for (i = 0; names[i]; i++)
-        if (ds_is(t, names[i]))
-            return 1;
-    return 0;
-}
+int ds_void(Str t) { return t.p && (ds_tag_flags(t) & T_VOID) != 0; }
 static int ascii_equal(Str s, const char *name) {
     size_t i;
     for (i = 0; i < s.n; i++)
@@ -534,7 +540,8 @@ int ds_tokenize(Document *d, Str html, TokenSink sink, void *ctx) {
     dispatch_start:
         if (!sink(ctx, START, tag, dispatch_attrs))
             return 0;
-        if (!selfclosed && (ds_is(tag, "script") || ds_is(tag, "style") || ds_is(tag, "title"))) {
+        if (!selfclosed && (ds_is(tag, "script") ||
+                            (tag.n == 5 && (ds_is(tag, "style") || ds_is(tag, "title"))))) {
             size_t q = end;
             int found = 0;
             while (q + 2 + tag.n <= n) {

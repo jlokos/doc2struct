@@ -24,9 +24,14 @@ typedef struct {
 typedef struct {
     Document *document;
     Vec items, cells, parts;
+    FlowCell **grid;
+    size_t grid_cap;
     size_t block;
     size_t max_row, max_col, last_row, last_col;
     int active, table, has_coordinate, unordered;
+    uint64_t plain_styles, font_styles;
+    double min_font, max_font;
+    int indexed, have_font;
 } Flow;
 
 static int image(const Item *item) { return item->run.src.p != NULL; }
@@ -42,11 +47,49 @@ typedef struct {
     size_t capacity;
 } FlowItem;
 
+static void remember_style(Flow *flow, const Item *item) {
+    uint64_t bit = UINT64_C(1) << (item->run.flags & 63);
+    double font = item->run.font;
+    if (image(item))
+        return;
+    if (!item->run.has_font) {
+        flow->plain_styles |= bit;
+        return;
+    }
+    flow->font_styles |= bit;
+    if (font != font)
+        return;
+    if (!flow->have_font || font < flow->min_font) flow->min_font = font;
+    if (!flow->have_font || font > flow->max_font) flow->max_font = font;
+    flow->have_font = 1;
+}
+/* Reject-only summaries may retain styles of discarded items. Collisions and
+ * old bounds merely fall back to the original ordered search; every match is
+ * still checked by same(). Build lazily to keep ordinary short lines cheap. */
+static int possible_style(Flow *flow, const Item *item) {
+    uint64_t bit = UINT64_C(1) << (item->run.flags & 63);
+    if (!flow->indexed) {
+        FlowItem *items = flow->items.p;
+        size_t i;
+        flow->plain_styles = flow->font_styles = 0;
+        flow->have_font = 0;
+        for (i = 0; i < flow->items.n; i++)
+            remember_style(flow, &items[i].item);
+        flow->indexed = 1;
+    }
+    return item->run.has_font ?
+        (flow->font_styles & bit) && flow->have_font &&
+        item->run.font >= flow->min_font && item->run.font <= flow->max_font :
+        (flow->plain_styles & bit) != 0;
+}
+
 static int add_item(Flow *flow, Item value) {
     FlowItem *item = ds_push(&flow->document->arena, &flow->items, sizeof(FlowItem));
     if (!item)
         return 0;
     *item = (FlowItem){value, 0};
+    if (flow->indexed)
+        remember_style(flow, &value);
     return ds_keep_href(flow->document, &item->item.hrefs, value.run.href);
 }
 static int append_text(Flow *flow, FlowItem *item, Str text) {
@@ -96,6 +139,8 @@ static int plain_run(Flow *flow, const Run *run) {
     if (empty(&current) || same(&current, &items[flow->items.n - 1].item))
         return ds_keep_href(flow->document, &items[flow->items.n - 1].item.hrefs, run->href) &&
                append_text(flow, items + flow->items.n - 1, run->text);
+    if (flow->items.n >= 32 && !possible_style(flow, &current))
+        return add_item(flow, current);
     for (i = flow->items.n; i; i--) {
         if (!image(&items[i - 1].item) && same(&current, &items[i - 1].item)) {
             for (j = i; j < flow->items.n; j++)
@@ -280,9 +325,14 @@ static int table_finish(Flow *flow, Line *line) {
     }
     if (nc && nr > SIZE_MAX / nc / sizeof(Str))
         goto large;
-    grid = ds_alloc(&d->arena, nr * nc * sizeof(FlowCell *));
-    if (!grid)
-        return 0;
+    if (!flow->grid || nr * nc > flow->grid_cap) {
+        flow->grid = ds_alloc_uninit(&d->arena, nr * nc * sizeof(FlowCell *));
+        if (!flow->grid)
+            return 0;
+        flow->grid_cap = nr * nc;
+    }
+    grid = flow->grid;
+    memset(grid, 0, nr * nc * sizeof(FlowCell *));
     for (i = 0; i < flow->cells.n; i++) {
         FlowCell *cell = cells + i;
         for (y = 0; y < cell->rs; y++)
@@ -356,31 +406,66 @@ large:
     return 0;
 }
 
+static int plain_finish(Flow *flow, Line *line) {
+    Document *d = flow->document;
+    FlowItem *items = flow->items.p;
+    size_t i;
+    if (flow->items.n == 1 && !image(&items[0].item))
+        items[0].item.run.text = ds_strip(items[0].item.run.text, 1);
+    for (i = 0; i < flow->items.n; i++)
+        if (!empty(&items[i].item))
+            break;
+    if (i < flow->items.n) {
+        line->items = ds_alloc_uninit(&d->arena, flow->items.n * sizeof(Item));
+        if (!line->items)
+            return 0;
+        for (i = 0; i < flow->items.n; i++)
+            line->items[i] = items[i].item;
+        line->nitems = flow->items.n;
+    }
+    return !d->arena.error[0];
+}
+
+/* Instruction/PDF callers use the same amortized text builder as streaming
+ * HTML. Repeated concatenation of immutable prefixes costs quadratic memory
+ * in the document arena, where old allocations live until document cleanup. */
+int ds_flow_plain_line(Document *d, const Run *runs, size_t n, Line *line) {
+    if (n == 1) {
+        Item item = {*runs, 0};
+        if (empty(&item))
+            return 1;
+        if (!image(&item))
+            item.run.text = ds_strip(item.run.text, 1);
+        line->items = ds_alloc_uninit(&d->arena, sizeof(Item));
+        if (!line->items || !ds_keep_href(d, &item.hrefs, runs->href))
+            return 0;
+        *line->items = item;
+        line->nitems = 1;
+        return 1;
+    }
+    Flow flow = {0};
+    FlowItem scratch[16];
+    size_t i;
+    flow.document = d;
+    /* Most instruction blocks are short. Grow beyond stack scratch only when
+     * needed; plain_finish copies the persistent items into the document. */
+    flow.items = (Vec){scratch, 0, sizeof(scratch) / sizeof(*scratch)};
+    for (i = 0; i < n; i++)
+        if (!plain_run(&flow, runs + i))
+            return 0;
+    return plain_finish(&flow, line);
+}
+
 static int finish_block(Flow *flow) {
     Document *d = flow->document;
     Line line = {0}, *out;
-    FlowItem *items = flow->items.p;
-    size_t i;
     if (!flow->active)
         return 1;
     if (flow->table) {
         if (!table_finish(flow, &line))
             return 0;
-    } else {
-        if (flow->items.n == 1 && !image(&items[0].item))
-            items[0].item.run.text = ds_strip(items[0].item.run.text, 1);
-        for (i = 0; i < flow->items.n; i++)
-            if (!empty(&items[i].item))
-                break;
-        if (i < flow->items.n) {
-            line.items = ds_alloc_uninit(&d->arena, flow->items.n * sizeof(Item));
-            if (!line.items)
-                return 0;
-            for (i = 0; i < flow->items.n; i++)
-                line.items[i] = items[i].item;
-            line.nitems = flow->items.n;
-        }
-    }
+    } else if (!plain_finish(flow, &line))
+        return 0;
     if (line.nitems || line.matrix.nr) {
         out = ds_push(&d->arena, &d->lines, sizeof(Line));
         if (!out)
@@ -391,6 +476,7 @@ static int finish_block(Flow *flow) {
     flow->max_row = flow->max_col = 0;
     flow->has_coordinate = flow->unordered = 0;
     flow->active = 0;
+    flow->indexed = 0;
     return !d->arena.error[0];
 }
 

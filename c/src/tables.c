@@ -551,11 +551,14 @@ static int absorb(Document *d, const Rules *r) {
             row->nnotes = notes.n;
         }
         if (r->postamble_lines > 0) {
+            int following_table = -1;
             parts = (Vec){0};
             j = last + 1;
             while (j < n && parts.n < (size_t)r->postamble_lines && annotation_text(d, r, rows + j) &&
                    !rows[j].removed) {
-                if (next_table(rows, n, j)) {
+                if (following_table < 0)
+                    following_table = next_table(rows, n, j);
+                if (following_table) {
                     row->cleaned |= DS_TABLE_ATTACHMENT;
                     break;
                 }

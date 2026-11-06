@@ -1,3 +1,4 @@
+#define DS_STRING_IMPLEMENTATION
 #include "doc2struct.h"
 #include <stdlib.h>
 #include <string.h>
@@ -130,8 +131,15 @@ static uint64_t hash(Str s) {
         h ^= h >> 29;
     }
     word = 0;
-    if (i < s.n)
-        memcpy(&word, s.p + i, s.n - i);
+    if (i < s.n) {
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        if (s.n >= 8) {
+            memcpy(&word, s.p + s.n - 8, 8);
+            word >>= (8 - (s.n - i)) * 8;
+        } else
+#endif
+            memcpy(&word, s.p + i, s.n - i);
+    }
     h = (h ^ word) * 0xc2b2ae3d27d4eb4fULL;
     h ^= h >> 33;
     h *= 0xff51afd7ed558ccdULL;
